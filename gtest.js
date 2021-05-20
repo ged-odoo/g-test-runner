@@ -46,8 +46,8 @@
   });
 
   bus.addEventListener("after-test", (ev) => {
-    const { test, suite } = ev.detail;
-    console.log(`after-test: ${test.description}`, test, suite);
+    const test = ev.detail;
+    console.log(`after-test: ${test.description}`, test);
   });
 
   bus.addEventListener("after-suite", (ev) => {
@@ -77,6 +77,7 @@
     doneTestNumber: 0,
     doneSuiteNumber: 0,
     started: false,
+    onlyTest: null,
   });
 
   function describe(path, cb) {
@@ -120,11 +121,19 @@
       cb,
       asserts: [],
       result: true,
+      suite,
     };
     suite.tests.push(test);
     bus.trigger("test-added", test);
     state.testNumber++;
+    return test;
   }
+
+  test.only = function restrict() {
+    const newTest = test(...arguments);
+    state.onlyTest = newTest;
+    return newTest;
+  };
 
   class Assert {
     constructor(test) {
@@ -147,27 +156,35 @@
     state.started = true;
     bus.trigger("before-all");
 
-    while (jobQueue.length) {
-      const suite = jobQueue.shift();
-      bus.trigger("before-suite", suite);
-      for (let test of suite.tests) {
-        const assert = new Assert(test);
-        bus.trigger("before-test", test);
-        let start = Date.now();
-
-        await test.cb(assert);
-        test.duration = Date.now() - start;
-        state.doneTestNumber++;
-        if (!test.result) {
-          state.failedTestNumber++;
+    if (state.onlyTest) {
+      await runTest(state.onlyTest);
+    } else {
+      while (jobQueue.length) {
+        const suite = jobQueue.shift();
+        bus.trigger("before-suite", suite);
+        for (let test of suite.tests) {
+          await runTest(test);
         }
-
-        bus.trigger("after-test", { test, suite });
+        state.doneSuiteNumber++;
+        bus.trigger("after-suite", suite);
       }
-      state.doneSuiteNumber++;
-      bus.trigger("after-suite", suite);
     }
     bus.trigger("after-all");
+  }
+
+  async function runTest(test) {
+    const assert = new Assert(test);
+    bus.trigger("before-test", test);
+    let start = Date.now();
+
+    await test.cb(assert);
+    test.duration = Date.now() - start;
+    state.doneTestNumber++;
+    if (!test.result) {
+      state.failedTestNumber++;
+    }
+
+    bus.trigger("after-test", test);
   }
 
   Object.assign(gTest, {
@@ -318,6 +335,8 @@
     }
     .gtest-cell {
         padding: 5px;
+        font-weight: bold;
+        color: #444444;
     }
     .gtest-duration {
       float: right;
@@ -353,7 +372,8 @@
 
   const tests = {};
 
-  function addTestResult(test, suite) {
+  function addTestResult(test) {
+    const suite = test.suite;
     // header
     const header = document.createElement("div");
     header.classList.add("gtest-result-header");
@@ -412,8 +432,7 @@
   });
 
   bus.addEventListener("after-test", (ev) => {
-    const { test, suite } = ev.detail;
-    addTestResult(test, suite);
+    addTestResult(ev.detail);
   });
 
   bus.addEventListener("after-all", () => {
