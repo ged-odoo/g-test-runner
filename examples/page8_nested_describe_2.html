@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang=en>
+<head>
+<meta charset=utf-8>
+<title>gTest</title>
+</head>
+<body>
+<script src="../gtest.js"></script>
+<script>
+(async function () {
+
+const {describe, test} = gTest;
+
+
+describe('suite 1', 'suite 2', () => {
+
+    test('some test', (assert) => {assert.equal(1 + 1, 2);});
+    
+    describe('suite 3', () => {
+        
+        test('some other test', (assert) => {assert.equal(1 + 1, 2);});
+    });
+});
+
+})();
+
+</script>
+</body>
+</html>

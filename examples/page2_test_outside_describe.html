@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang=en>
+<head>
+<meta charset=utf-8>
+<title>gTest</title>
+</head>
+<body>
+<script src="../gtest.js"></script>
+<script>
+(function () {
+
+const {test} = gTest;
+
+/**
+ * We have here a test definition with no surrounding describe. This should
+ * be an error
+ */
+
+test('simple addition', (assert) => {
+    assert.equal(1 + 1, 2);
+});
+
+
+})();
+
+</script>
+</body>
+</html>

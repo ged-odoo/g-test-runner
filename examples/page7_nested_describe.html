@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang=en>
+<head>
+<meta charset=utf-8>
+<title>gTest</title>
+</head>
+<body>
+<script src="../gtest.js"></script>
+<script>
+(async function () {
+
+const {describe, test} = gTest;
+
+
+describe('suite 1', () => {
+
+    test('test 1a', (assert) => {assert.equal(1 + 1, 2);});
+
+    describe('suite 2', () => {
+    
+        test('test 2a', (assert) => {assert.equal(1 + 1, 2);});
+    
+        test('test 2b', (assert) => {assert.equal(1 + 1, 2);});
+        
+        describe('suite 3', () => {
+            
+            test('test 3a', (assert) => {assert.equal(1 + 1, 2);});
+            
+        });
+
+        test('test 2c', (assert) => {assert.equal(1 + 1, 2);});
+    });
+
+    describe('suite 4', () => {
+    
+        test('test 4a', (assert) => {assert.equal(1 + 1, 2);});
+
+    });
+});
+
+
+
+
+})();
+
+</script>
+</body>
+</html>
