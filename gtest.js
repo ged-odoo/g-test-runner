@@ -73,6 +73,9 @@
     suites: testSuites,
     suiteNumber: 0,
     testNumber: 0,
+    failedTestNumber: 0,
+    doneTestNumber: 0,
+    doneSuiteNumber: 0,
     started: false,
   });
 
@@ -144,11 +147,16 @@
         bus.trigger("before-test", test);
 
         await test.cb(assert);
+        state.doneTestNumber++;
+        if (!assert.result) {
+          state.failedTestNumber++;
+        }
 
         test.result = assert.result;
         bus.trigger("after-test", test);
         // console.log(`  [${result}] ${test.description}`);
       }
+      state.doneSuiteNumber++;
       bus.trigger("after-suite", suite);
     }
     bus.trigger("after-all");
@@ -177,6 +185,8 @@
         </div>
         <div class="gtest-panel-main">
           <button class="gtest-btn gtest-start">Start</button>
+          <button class="gtest-btn" disabled="disabled">Abort</button>
+          <button class="gtest-btn">Rerun all</button>
         </div>
         <div class="gtest-status">
         </div>
@@ -188,6 +198,9 @@
     body {
         margin: 0
     }
+    .gtest-runner {
+      font-family: sans-serif;
+    }
     .gtest-panel {
         background-color: #eeeeee;
     }
@@ -197,8 +210,11 @@
       padding-top: 4px;
     }
     .gtest-logo {
-      font-size: 25px;
+      font-size: 30px;
+      font-weight: bold;
       font-family: sans-serif;
+      color: #444444;
+      margin-left: 4px;
     }
 
     .gtest-btn {
@@ -225,7 +241,7 @@
 
     .gtest-btn:disabled {
       cursor: not-allowed;
-      opacity: 0.7;
+      opacity: 0.6;
     }
     
     .gtest-panel-main {
@@ -238,13 +254,19 @@
       height: 30px;
       line-height: 30px;
       font-size: 14px;
-      padding-left: 8px;
+      padding-left: 12px;
     }
 
-    .gtest-square {
+    .gtest-status .gtest-circle {
+      position: relative;
+      top: 2px;
+    }
+
+    .gtest-circle {
         display: inline-block;
         height: 16px;
         width: 16px;
+        border-radius: 8px;
     }
 
     .gtest-red {
@@ -285,8 +307,8 @@
   const reporting = document.getElementsByClassName("gtest-reporting")[0];
 
   // UI update functions
-  function setStatusText(text) {
-    statusPanel.textContent = text;
+  function setStatusContent(content) {
+    statusPanel.innerHTML = content;
   }
 
   function disableStartButton() {
@@ -297,7 +319,7 @@
     const div = document.createElement("div");
     div.classList.add("gtest-result");
     const result = document.createElement("span");
-    result.classList.add("gtest-square");
+    result.classList.add("gtest-circle");
     result.classList.add(test.result ? "gtest-green" : "gtest-red");
 
     div.innerHTML = `<span class="gtest-cell">${test.suite.fullPath}</span><span class="gtest-cell">${test.description}</span>`;
@@ -310,7 +332,7 @@
 
   bus.addEventListener("before-test", (ev) => {
     const description = ev.detail.description;
-    setStatusText(`Running: ${description}`);
+    setStatusContent(`Running: ${description}`);
   });
 
   bus.addEventListener("after-test", (ev) => {
@@ -319,7 +341,10 @@
   });
 
   bus.addEventListener("after-all", () => {
-    setStatusText("");
+    const statusCls =
+      state.failedTestNumber === 0 ? "gtest-green" : "gtest-red";
+    const status = `<span class="gtest-circle ${statusCls}" ></span> ${state.doneTestNumber} tests completed, with ${state.failedTestNumber} failed`;
+    setStatusContent(status);
   });
 
   startBtn.addEventListener("click", () => {
@@ -337,7 +362,7 @@
       const newStatus = `${suiteNumber} suites, with ${testNumber} tests`;
       if (newStatus !== status) {
         status = newStatus;
-        setStatusText(status);
+        setStatusContent(status);
       }
       requestAnimationFrame(updateIdleStatus);
     }
