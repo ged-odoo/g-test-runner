@@ -1,4 +1,4 @@
-(function gTestCore() {
+(function gTestInternal() {
   const domReady = new Promise((resolve) => {
     if (document.readyState !== "loading") {
       resolve();
@@ -16,12 +16,20 @@
   const bus = new Bus();
 
   window.gTest = {
-    core: { bus, domReady },
+    __internal__: { bus, domReady },
   };
 })();
 
 (function gTestDebugging() {
-  const bus = gTest.core.bus;
+  const bus = gTest.__internal__.bus;
+
+  bus.addEventListener("suite-added", (ev) => {
+    console.log("new suite", ev.detail);
+  });
+
+  bus.addEventListener("test-added", (ev) => {
+    console.log("new test", ev.detail);
+  });
 
   bus.addEventListener("before-all", () => {
     console.log("start");
@@ -53,12 +61,16 @@
 })();
 
 (function gTestRunner() {
-  const { domReady, bus } = gTest.core;
+  const { domReady, bus } = gTest.__internal__;
 
   const testSuites = [];
   const stack = [];
   let nextId = 1;
   let mutex = Promise.resolve();
+
+  Object.assign(gTest.__internal__, {
+    suites: testSuites,
+  });
 
   function describe(path, cb) {
     if (typeof cb === "string") {
@@ -83,6 +95,7 @@
       // define content
       testSuites.push(suite);
       stack.push(suite);
+      bus.trigger("suite-added", suite);
       return cb();
     });
   }
@@ -92,12 +105,14 @@
     if (!suite) {
       throw new Error("Test defined outside of a suite");
     }
-    suite.tests.push({
+    const test = {
       description,
       cb,
       suite,
       result: null,
-    });
+    };
+    suite.tests.push(test);
+    bus.trigger("test-added", test);
   }
 
   class Assert {
@@ -140,19 +155,22 @@
 })();
 
 (async function ui() {
-  const { domReady, bus } = gTest.core;
+  const { domReady, bus } = gTest.__internal__;
 
   // initial UI
   const html = `
     <div class="gtest-runner">
-        <div class="gtest-panel">
-            <div>
-                <span>GTest</span>
-                <button class="gtest-start-btn">Start</button>
-            </div>
-            <div class="gtest-status"></div>
+      <div class="gtest-panel">
+        <div class="gtest-panel-top">
+          <span class="gtest-logo">gTest</span>
         </div>
-        <div class="gtest-reporting"></div>
+        <div class="gtest-panel-main">
+          <button class="gtest-btn gtest-start">Start</button>
+        </div>
+        <div class="gtest-status">
+        </div>
+      </div>
+      <div class="gtest-reporting"></div>
     </div>`;
 
   const style = `
@@ -161,8 +179,30 @@
     }
     .gtest-panel {
         background-color: #eeeeee;
-        height: 100px;
-        border-bottom: 1px solid gray;
+    }
+    .gtest-panel-top {
+      height: 45px;
+      padding-left: 8px;
+      padding-top: 4px;
+    }
+    .gtest-logo {
+      font-size: 25px;
+      font-family: sans-serif;
+    }
+    .gtest-btn {
+      height: 30px;
+    }
+
+    .gtest-panel-main {
+      height: 45px;
+      line-height: 45px;
+      padding-left: 8px;
+    }
+    .gtest-status {
+      background-color: #D2E0E6;
+      height: 30px;
+      line-height: 30px;
+      font-size: 14px;
     }
 
     .gtest-square {
@@ -205,7 +245,7 @@
 
   // key dom elements
   const statusPanel = document.getElementsByClassName("gtest-status")[0];
-  const startBtn = document.getElementsByClassName("gtest-start-btn")[0];
+  const startBtn = document.getElementsByClassName("gtest-start")[0];
   const reporting = document.getElementsByClassName("gtest-reporting")[0];
 
   // UI update functions
