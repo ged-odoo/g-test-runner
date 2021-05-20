@@ -1,0 +1,19 @@
+{
+  "name": "g-test-runner",
+  "version": "0.0.1",
+  "description": "A simple javascript test runner (for browser)",
+  "scripts": {
+    "prettier": "prettier --write gtest.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ged-odoo/g-test-runner.git"
+  },
+  "author": "Gery Debongnie",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ged-odoo/g-test-runner/issues"
+  },
+  "homepage": "https://github.com/ged-odoo/g-test-runner#readme"
+}

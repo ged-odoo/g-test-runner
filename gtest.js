@@ -23,7 +23,7 @@
 (function gTestDebugging() {
   const bus = gTest.core.bus;
 
-  bus.addEventListener("before", () => {
+  bus.addEventListener("before-all", () => {
     console.log("start");
   });
 
@@ -42,7 +42,12 @@
     console.log(`after-test: ${test.description}`, test);
   });
 
-  bus.addEventListener("after", () => {
+  bus.addEventListener("after-suite", (ev) => {
+    const suite = ev.detail;
+    console.log(`after-suite: ${suite.path}`, suite);
+  });
+
+  bus.addEventListener("after-all", () => {
     console.log("after");
   });
 })();
@@ -107,7 +112,7 @@
   async function start() {
     await domReady; // may need dom for some tests
 
-    bus.trigger("before");
+    bus.trigger("before-all");
 
     while (testSuites.length) {
       const suite = testSuites.shift();
@@ -122,8 +127,9 @@
         bus.trigger("after-test", test);
         // console.log(`  [${result}] ${test.description}`);
       }
+      bus.trigger("after-suite", suite);
     }
-    bus.trigger("after");
+    bus.trigger("after-all");
   }
 
   Object.assign(gTest, {
@@ -135,9 +141,6 @@
 
 (async function ui() {
   const { domReady, bus } = gTest.core;
-
-  // capture in case some test redefine them
-  const requestAnimationFrame = window.requestAnimationFrame;
 
   // initial UI
   const html = `
@@ -200,62 +203,21 @@
   sheet.innerHTML = style;
   document.head.appendChild(sheet);
 
-  // dom elements
+  // key dom elements
   const statusPanel = document.getElementsByClassName("gtest-status")[0];
   const startBtn = document.getElementsByClassName("gtest-start-btn")[0];
   const reporting = document.getElementsByClassName("gtest-reporting")[0];
 
-  // reporting internal state
-  let status = 0; // 0 => initial, 1 => started, 2 => stopped
-  let results = [];
-  let currentTest = null;
-
-  // raf update
-  requestAnimationFrame(updateUI);
-
-  function updateUI() {
-    if (results.length) {
-      for (let r of results) {
-        reporting.appendChild(r);
-      }
-      results = [];
-    }
-    if (currentTest) {
-      statusPanel.textContent = `Running: ${currentTest.description}`;
-    }
-    if (status < 2) {
-      requestAnimationFrame(updateUI);
-    } else {
-      statusPanel.textContent = ``;
-    }
+  // UI update functions
+  function setStatusText(text) {
+    statusPanel.textContent = text;
   }
 
-  // listeners
-  bus.addEventListener("before", (ev) => {
+  function disableStartButton() {
     startBtn.setAttribute("disabled", "disabled");
-    status = 1;
-  });
+  }
 
-  bus.addEventListener("before-test", (ev) => {
-    currentTest = ev.detail;
-  });
-
-  bus.addEventListener("after-test", (ev) => {
-    const test = ev.detail;
-    const result = makeTestResult(test);
-    results.push(result);
-    currentTest = null;
-  });
-
-  bus.addEventListener("after", (ev) => {
-    status = 2;
-  });
-
-  startBtn.addEventListener("click", () => {
-    gTest.start();
-  });
-
-  function makeTestResult(test) {
+  function addTestResult(test) {
     const div = document.createElement("div");
     div.classList.add("gtest-result");
     const result = document.createElement("span");
@@ -264,6 +226,27 @@
 
     div.innerHTML = `<span class="gtest-cell">${test.suite.fullPath}</span><span class="gtest-cell">${test.description}</span>`;
     div.prepend(result);
-    return div;
+    reporting.appendChild(div);
   }
+
+  // listeners
+  bus.addEventListener("before-all", disableStartButton);
+
+  bus.addEventListener("before-test", (ev) => {
+    const description = ev.detail.description;
+    setStatusText(`Running: ${description}`);
+  });
+
+  bus.addEventListener("after-test", (ev) => {
+    const test = ev.detail;
+    addTestResult(test);
+  });
+
+  bus.addEventListener("after-all", () => {
+    setStatusText("");
+  });
+
+  startBtn.addEventListener("click", () => {
+    gTest.start();
+  });
 })();
