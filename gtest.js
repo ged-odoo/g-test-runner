@@ -61,6 +61,7 @@
 })();
 
 (function gTestRunner() {
+  const state = gTest.__internal__;
   const { domReady, bus } = gTest.__internal__;
 
   const testSuites = [];
@@ -68,8 +69,11 @@
   let nextId = 1;
   let mutex = Promise.resolve();
 
-  Object.assign(gTest.__internal__, {
+  Object.assign(state, {
     suites: testSuites,
+    suiteNumber: 0,
+    testNumber: 0,
+    started: false,
   });
 
   function describe(path, cb) {
@@ -96,6 +100,7 @@
       testSuites.push(suite);
       stack.push(suite);
       bus.trigger("suite-added", suite);
+      state.suiteNumber++;
       return cb();
     });
   }
@@ -113,6 +118,7 @@
     };
     suite.tests.push(test);
     bus.trigger("test-added", test);
+    state.testNumber++;
   }
 
   class Assert {
@@ -127,6 +133,7 @@
   async function start() {
     await domReady; // may need dom for some tests
 
+    state.started = true;
     bus.trigger("before-all");
 
     while (testSuites.length) {
@@ -156,6 +163,10 @@
 
 (async function ui() {
   const { domReady, bus } = gTest.__internal__;
+  const state = gTest.__internal__;
+
+  // capture RAF in case some testing code decides to modify it
+  const requestAnimationFrame = window.requestAnimationFrame;
 
   // initial UI
   const html = `
@@ -189,10 +200,34 @@
       font-size: 25px;
       font-family: sans-serif;
     }
+
     .gtest-btn {
       height: 30px;
+      background-color:#768d87;
+      border-radius:4px;
+      border:1px solid #566963;
+      display:inline-block;
+      cursor:pointer;
+      color:#ffffff;
+      font-size:15px;
+      font-weight:bold;
+      padding:6px 12px;
+      text-decoration:none;
+      text-shadow:0px 1px 0px #2b665e;
+    }
+    .gtest-btn:hover {
+      background-color:#6c7c7c;
+    }
+    .gtest-btn:active {
+      position:relative;
+      top:1px;
     }
 
+    .gtest-btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
+    
     .gtest-panel-main {
       height: 45px;
       line-height: 45px;
@@ -203,6 +238,7 @@
       height: 30px;
       line-height: 30px;
       font-size: 14px;
+      padding-left: 8px;
     }
 
     .gtest-square {
@@ -269,7 +305,7 @@
     reporting.appendChild(div);
   }
 
-  // listeners
+  // generic listeners
   bus.addEventListener("before-all", disableStartButton);
 
   bus.addEventListener("before-test", (ev) => {
@@ -289,4 +325,23 @@
   startBtn.addEventListener("click", () => {
     gTest.start();
   });
+
+  // initial status update before started
+  let started = state.started;
+  let status = "";
+  bus.addEventListener("before-all", () => (started = true));
+
+  function updateIdleStatus() {
+    if (!started) {
+      const { suiteNumber, testNumber } = state;
+      const newStatus = `${suiteNumber} suites, with ${testNumber} tests`;
+      if (newStatus !== status) {
+        status = newStatus;
+        setStatusText(status);
+      }
+      requestAnimationFrame(updateIdleStatus);
+    }
+  }
+
+  requestAnimationFrame(updateIdleStatus);
 })();
