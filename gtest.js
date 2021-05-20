@@ -46,8 +46,8 @@
   });
 
   bus.addEventListener("after-test", (ev) => {
-    const test = ev.detail;
-    console.log(`after-test: ${test.description}`, test);
+    const { test, suite } = ev.detail;
+    console.log(`after-test: ${test.description}`, test, suite);
   });
 
   bus.addEventListener("after-suite", (ev) => {
@@ -70,7 +70,7 @@
   let mutex = Promise.resolve();
 
   Object.assign(state, {
-    suites: testSuites,
+    suites: [],
     suiteNumber: 0,
     testNumber: 0,
     failedTestNumber: 0,
@@ -100,7 +100,8 @@
     };
     mutex = mutex.then(() => {
       // define content
-      testSuites.push(suite);
+      testSuites.push(suite); // testSuites will be modified in place
+      state.suites.push(suite);
       stack.push(suite);
       bus.trigger("suite-added", suite);
       state.suiteNumber++;
@@ -116,8 +117,8 @@
     const test = {
       description,
       cb,
-      suite,
-      result: null,
+      asserts: [],
+      result: true,
     };
     suite.tests.push(test);
     bus.trigger("test-added", test);
@@ -125,11 +126,17 @@
   }
 
   class Assert {
-    result = true;
+    constructor(test) {
+      this.test = test;
+    }
 
     equal(left, right, descr) {
       const isOK = left === right;
-      this.result = this.result && isOK;
+      this.test.asserts.push({
+        result: isOK,
+        description: descr || "Equal values",
+      });
+      this.test.result = this.test.result && isOK;
     }
   }
 
@@ -143,18 +150,16 @@
       const suite = testSuites.shift();
       bus.trigger("before-suite", suite);
       for (let test of suite.tests) {
-        const assert = new Assert();
+        const assert = new Assert(test);
         bus.trigger("before-test", test);
 
         await test.cb(assert);
         state.doneTestNumber++;
-        if (!assert.result) {
+        if (!test.result) {
           state.failedTestNumber++;
         }
 
-        test.result = assert.result;
-        bus.trigger("after-test", test);
-        // console.log(`  [${result}] ${test.description}`);
+        bus.trigger("after-test", { test, suite });
       }
       state.doneSuiteNumber++;
       bus.trigger("after-suite", suite);
@@ -241,7 +246,7 @@
 
     .gtest-btn:disabled {
       cursor: not-allowed;
-      opacity: 0.6;
+      opacity: 0.4;
     }
     
     .gtest-panel-main {
@@ -257,36 +262,54 @@
       padding-left: 12px;
     }
 
-    .gtest-status .gtest-circle {
+    .gtest-circle {
+      display: inline-block;
+      height: 16px;
+      width: 16px;
+      border-radius: 8px;
       position: relative;
       top: 2px;
     }
 
-    .gtest-circle {
-        display: inline-block;
-        height: 16px;
-        width: 16px;
-        border-radius: 8px;
-    }
-
     .gtest-red {
-        background-color: red;
+        background-color: darkred;
     }
 
     .gtest-green {
-        background-color: green;
+        background-color: darkgreen;
     }
 
     .gtest-reporting {
-        display: table;
+      padding-top: 5px;
+      padding-left: 10px;
+      font-size: 14px;
     }
 
     .gtest-result {
-        display: table-row;
+      border-bottom: 1px solid lightgray;
+    }
+    .gtest-result-line {
+      margin: 5px;
+    }
+
+    .gtest-result-success {
+      color: darkgreen;
+    }
+
+    .gtest-result-fail {
+      color: darkred;
+    }
+
+    .gtest-result-header {
+      padding: 4px 12px;
+      cursor: default;
+    }
+
+    .gtest-result-detail {
+      padding-left: 60px;
     }
 
     .gtest-cell {
-        display: table-cell;
         padding: 5px;
     }`;
 
@@ -315,15 +338,44 @@
     startBtn.setAttribute("disabled", "disabled");
   }
 
-  function addTestResult(test) {
-    const div = document.createElement("div");
-    div.classList.add("gtest-result");
+  function addTestResult(test, suite) {
+    // header
+    const header = document.createElement("div");
+    header.classList.add("gtest-result-header");
+
     const result = document.createElement("span");
     result.classList.add("gtest-circle");
     result.classList.add(test.result ? "gtest-green" : "gtest-red");
+    header.innerHTML = `<span class="gtest-cell">${suite.fullPath}:</span><span class="gtest-cell">${test.description}</span>`;
+    header.prepend(result);
 
-    div.innerHTML = `<span class="gtest-cell">${test.suite.fullPath}</span><span class="gtest-cell">${test.description}</span>`;
-    div.prepend(result);
+    // test result div
+    const div = document.createElement("div");
+    div.classList.add("gtest-result");
+    div.prepend(header);
+
+    // detailed test result
+    header.addEventListener(
+      "click",
+      () => {
+        const results = document.createElement("div");
+        results.classList.add("gtest-result-detail");
+        let i = 1;
+        for (let assert of test.asserts) {
+          const div = document.createElement("div");
+          div.classList.add("gtest-result-line");
+          const lineCls = assert.result
+            ? "gtest-result-success"
+            : "gtest-result-fail";
+          div.classList.add(lineCls);
+          div.innerText = `${i++}. ${assert.description}`;
+          results.appendChild(div);
+        }
+        div.appendChild(results);
+      },
+      { once: true }
+    );
+
     reporting.appendChild(div);
   }
 
@@ -336,8 +388,8 @@
   });
 
   bus.addEventListener("after-test", (ev) => {
-    const test = ev.detail;
-    addTestResult(test);
+    const { test, suite } = ev.detail;
+    addTestResult(test, suite);
   });
 
   bus.addEventListener("after-all", () => {
