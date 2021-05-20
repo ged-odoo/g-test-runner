@@ -78,6 +78,7 @@
     doneSuiteNumber: 0,
     started: false,
     onlyTest: null,
+    onlySuite: null,
   });
 
   function describe(path, cb) {
@@ -98,17 +99,32 @@
       fullPath,
       path,
       tests: [],
+      subSuites: [],
     };
+
+    const parentSuite = stack[stack.length - 1];
+    if (parentSuite) {
+      parentSuite.subSuites.push(suite);
+    }
     mutex = mutex.then(() => {
       // define content
-      jobQueue.push(suite); // testSuites will be modified in place
+      if (!parentSuite) {
+        jobQueue.push(suite);
+      }
       state.suites.push(suite);
       stack.push(suite);
       bus.trigger("suite-added", suite);
       state.suiteNumber++;
       return cb();
     });
+    return suite;
   }
+
+  describe.only = function restrict() {
+    const suite = describe(...arguments);
+    state.onlySuite = suite;
+    return suite;
+  };
 
   function test(description, cb) {
     const suite = stack[stack.length - 1];
@@ -158,18 +174,27 @@
 
     if (state.onlyTest) {
       await runTest(state.onlyTest);
+    } else if (state.onlySuite) {
+      await runSuite(state.onlySuite);
     } else {
       while (jobQueue.length) {
         const suite = jobQueue.shift();
-        bus.trigger("before-suite", suite);
-        for (let test of suite.tests) {
-          await runTest(test);
-        }
-        state.doneSuiteNumber++;
-        bus.trigger("after-suite", suite);
+        await runSuite(suite);
       }
     }
     bus.trigger("after-all");
+  }
+
+  async function runSuite(suite) {
+    bus.trigger("before-suite", suite);
+    for (let test of suite.tests) {
+      await runTest(test);
+    }
+    for (let subSuite of suite.subSuites) {
+      await runSuite(subSuite);
+    }
+    state.doneSuiteNumber++;
+    bus.trigger("after-suite", suite);
   }
 
   async function runTest(test) {
