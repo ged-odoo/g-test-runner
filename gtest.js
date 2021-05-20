@@ -135,7 +135,7 @@
       const isOK = left === right;
       this.test.asserts.push({
         result: isOK,
-        description: descr || "Equal values",
+        description: descr || "values are equal",
       });
       this.test.result = this.test.result && isOK;
     }
@@ -153,8 +153,10 @@
       for (let test of suite.tests) {
         const assert = new Assert(test);
         bus.trigger("before-test", test);
+        let start = Date.now();
 
         await test.cb(assert);
+        test.duration = Date.now() - start;
         state.doneTestNumber++;
         if (!test.result) {
           state.failedTestNumber++;
@@ -316,7 +318,13 @@
     }
     .gtest-cell {
         padding: 5px;
-    }`;
+    }
+    .gtest-duration {
+      float: right;
+      font-size: smaller;
+      color: gray;
+    }
+    `;
 
   await domReady;
 
@@ -353,7 +361,10 @@
     const result = document.createElement("span");
     result.classList.add("gtest-circle");
     result.classList.add(test.result ? "gtest-green" : "gtest-red");
-    header.innerHTML = `<span class="gtest-cell">${suite.fullPath}:</span><span class="gtest-name" data-test-id="${test.id}">${test.description} (${test.asserts.length})</span>`;
+    const suitesHtml = `<span class="gtest-cell">${suite.fullPath}:</span>`;
+    const testHtml = `<span class="gtest-name" data-test-id="${test.id}">${test.description} (${test.asserts.length})</span>`;
+    const durationHtml = `<span class="gtest-duration">${test.duration} ms</span>`;
+    header.innerHTML = suitesHtml + testHtml + durationHtml;
     header.prepend(result);
 
     // test result div
