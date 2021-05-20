@@ -64,7 +64,7 @@
   const state = gTest.__internal__;
   const { domReady, bus } = gTest.__internal__;
 
-  const testSuites = [];
+  const jobQueue = [];
   const stack = [];
   let nextId = 1;
   let mutex = Promise.resolve();
@@ -100,7 +100,7 @@
     };
     mutex = mutex.then(() => {
       // define content
-      testSuites.push(suite); // testSuites will be modified in place
+      jobQueue.push(suite); // testSuites will be modified in place
       state.suites.push(suite);
       stack.push(suite);
       bus.trigger("suite-added", suite);
@@ -115,6 +115,7 @@
       throw new Error("Test defined outside of a suite");
     }
     const test = {
+      id: nextId++,
       description,
       cb,
       asserts: [],
@@ -146,8 +147,8 @@
     state.started = true;
     bus.trigger("before-all");
 
-    while (testSuites.length) {
-      const suite = testSuites.shift();
+    while (jobQueue.length) {
+      const suite = jobQueue.shift();
       bus.trigger("before-suite", suite);
       for (let test of suite.tests) {
         const assert = new Assert(test);
@@ -280,8 +281,7 @@
     }
 
     .gtest-reporting {
-      padding-top: 5px;
-      padding-left: 10px;
+      padding-left: 20px;
       font-size: 14px;
     }
 
@@ -309,6 +309,11 @@
       padding-left: 60px;
     }
 
+    .gtest-name {
+      color: #366097;
+      font-weight: 700;
+      cursor: pointer;
+    }
     .gtest-cell {
         padding: 5px;
     }`;
@@ -338,6 +343,8 @@
     startBtn.setAttribute("disabled", "disabled");
   }
 
+  const tests = {};
+
   function addTestResult(test, suite) {
     // header
     const header = document.createElement("div");
@@ -346,18 +353,27 @@
     const result = document.createElement("span");
     result.classList.add("gtest-circle");
     result.classList.add(test.result ? "gtest-green" : "gtest-red");
-    header.innerHTML = `<span class="gtest-cell">${suite.fullPath}:</span><span class="gtest-cell">${test.description}</span>`;
+    header.innerHTML = `<span class="gtest-cell">${suite.fullPath}:</span><span class="gtest-name" data-test-id="${test.id}">${test.description} (${test.asserts.length})</span>`;
     header.prepend(result);
 
     // test result div
     const div = document.createElement("div");
     div.classList.add("gtest-result");
     div.prepend(header);
+    tests[test.id] = test;
+    reporting.appendChild(div);
+  }
 
-    // detailed test result
-    header.addEventListener(
-      "click",
-      () => {
+  // detailed test result
+  reporting.addEventListener("click", (ev) => {
+    const testId = ev.target?.dataset?.testId;
+    if (testId) {
+      const test = tests[testId];
+      const resultDiv = ev.target.closest(".gtest-result");
+      const detailDiv = resultDiv.querySelector(".gtest-result-detail");
+      if (detailDiv) {
+        detailDiv.remove();
+      } else {
         const results = document.createElement("div");
         results.classList.add("gtest-result-detail");
         let i = 1;
@@ -371,13 +387,10 @@
           div.innerText = `${i++}. ${assert.description}`;
           results.appendChild(div);
         }
-        div.appendChild(results);
-      },
-      { once: true }
-    );
-
-    reporting.appendChild(div);
-  }
+        resultDiv.appendChild(results);
+      }
+    }
+  });
 
   // generic listeners
   bus.addEventListener("before-all", disableStartButton);
