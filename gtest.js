@@ -126,7 +126,7 @@
     return suite;
   };
 
-  function test(description, cb) {
+  function test(description, runTest) {
     const suite = stack[stack.length - 1];
     if (!suite) {
       throw new Error("Test defined outside of a suite");
@@ -134,7 +134,7 @@
     const test = {
       id: nextId++,
       description,
-      cb,
+      runTest,
       asserts: [],
       result: true,
       suite,
@@ -156,11 +156,17 @@
       this.test = test;
     }
 
-    equal(left, right, descr) {
-      const isOK = left === right;
+    equal(value, expected, descr) {
+      const isOK = value === expected;
+      let info = [];
+      if (!isOK) {
+        info = [`Expected: ${expected}`, `Value: ${value}`];
+      }
       this.test.asserts.push({
         result: isOK,
-        description: descr || "values are equal",
+        description:
+          descr || (isOK ? "values are equal" : "values are not equal"),
+        info,
       });
       this.test.result = this.test.result && isOK;
     }
@@ -202,7 +208,7 @@
     bus.trigger("before-test", test);
     let start = Date.now();
 
-    await test.cb(assert);
+    await test.runTest(assert);
     test.duration = Date.now() - start;
     state.doneTestNumber++;
     if (!test.result) {
@@ -353,6 +359,10 @@
       padding-left: 60px;
     }
 
+    .gtest-result-detail-line {
+      padding-left: 60px;
+    }
+
     .gtest-name {
       color: #366097;
       font-weight: 700;
@@ -442,6 +452,15 @@
           div.classList.add(lineCls);
           div.innerText = `${i++}. ${assert.description}`;
           results.appendChild(div);
+          if (!assert.result) {
+            // add detailed informations
+            for (let info of assert.info) {
+              const div = document.createElement("div");
+              div.classList.add("gtest-result-detail-line");
+              div.innerText = info;
+              results.appendChild(div);
+            }
+          }
         }
         resultDiv.appendChild(results);
       }
