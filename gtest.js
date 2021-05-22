@@ -64,10 +64,17 @@
   const state = gTest.__internal__;
   const { domReady, bus } = gTest.__internal__;
 
+  class Mutex {
+    prom = Promise.resolve();
+    add(cb) {
+      this.prom = this.prom.then(cb);
+    }
+  } 
+  const mutex = new Mutex();
+
   const jobQueue = [];
   let stack = [];
   let nextId = 1;
-  let mutex = Promise.resolve();
   let nextIsOnly = false;
 
   Object.assign(state, {
@@ -190,7 +197,7 @@
       : [description];
     const suite = new Suite(parent, description, path);
 
-    mutex = mutex.then(() => {
+    mutex.add(() => {
       return suite.defineContent(cb);
     });
   }
