@@ -65,9 +65,10 @@
   const { domReady, bus } = gTest.__internal__;
 
   const jobQueue = [];
-  const stack = [];
+  let stack = [];
   let nextId = 1;
   let mutex = Promise.resolve();
+  let nextIsOnly = false;
 
   Object.assign(state, {
     suites: [],
@@ -77,81 +78,84 @@
     doneTestNumber: 0,
     doneSuiteNumber: 0,
     started: false,
-    onlyTest: null,
-    onlySuite: null,
+    onlyJob: null,
   });
 
-  function describe(path, cb) {
-    if (typeof cb === "string") {
-      // nested describe definition
-      let nestedArgs = Array.from(arguments).slice(1);
+  class Job {
+    id = nextId++;
+    jobs = [];
 
-      return describe(path, () => {
-        describe(...nestedArgs);
-      });
-    }
-    // get correct suite, or create it
-    const pathNames = stack.map((s) => s.path).concat(path);
-    const fullPath = pathNames.join(" > ");
-
-    const suite = {
-      id: nextId++,
-      fullPath,
-      path,
-      tests: [],
-      subSuites: [],
-    };
-
-    const parentSuite = stack[stack.length - 1];
-    if (parentSuite) {
-      parentSuite.subSuites.push(suite);
-    }
-    mutex = mutex.then(() => {
-      // define content
-      if (!parentSuite) {
-        jobQueue.push(suite);
+    constructor(parent, description) {
+      this.description = description;
+      this.parent = parent;
+      if (parent) {
+        parent.jobs.push(this);
+      } else {
+        jobQueue.push(this);
       }
-      state.suites.push(suite);
-      stack.push(suite);
-      bus.trigger("suite-added", suite);
-      state.suiteNumber++;
-      return cb();
-    });
-    return suite;
-  }
-
-  describe.only = function restrict() {
-    const suite = describe(...arguments);
-    state.onlySuite = suite;
-    return suite;
-  };
-
-  function test(description, runTest) {
-    const suite = stack[stack.length - 1];
-    if (!suite) {
-      throw new Error("Test defined outside of a suite");
+      if (nextIsOnly) {
+        state.onlyJob = this;
+        nextIsOnly = false;
+      }
     }
-    const test = {
-      id: nextId++,
-      description,
-      runTest,
-      asserts: [],
-      result: true,
-      suite,
-    };
-    suite.tests.push(test);
-    bus.trigger("test-added", test);
-    state.testNumber++;
-    return test;
+
+    async run() {}
   }
 
-  test.only = function restrict() {
-    const newTest = test(...arguments);
-    state.onlyTest = newTest;
-    return newTest;
-  };
+  class Suite extends Job {
+    constructor(parent, description, path) {
+      super(parent, description);
+      this.path = path;
+    }
+
+    async defineContent(describeFn) {
+      state.suites.push(this);
+      stack.push(this);
+      bus.trigger("suite-added", this);
+      state.suiteNumber++;
+      await describeFn();
+      stack.pop();
+    }
+
+    async run() {
+      bus.trigger("before-suite", this);
+      for (let job of this.jobs) {
+        await job.run();
+      }
+      state.doneSuiteNumber++;
+      bus.trigger("after-suite", this);
+    }
+  }
+
+  class Test extends Job {
+    assertions = [];
+    result = true;
+    duration = null;
+
+    constructor(parent, description, cb) {
+      super(parent, description);
+      this.cb = cb;
+      bus.trigger("test-added", this);
+      state.testNumber++;
+    }
+
+    async run() {
+      const assert = new Assert(this);
+      bus.trigger("before-test", this);
+      let start = Date.now();
+
+      await this.cb(assert);
+      this.duration = Date.now() - start;
+      state.doneTestNumber++;
+      if (!this.result) {
+        state.failedTestNumber++;
+      }
+      bus.trigger("after-test", this);
+    }
+  }
 
   class Assert {
+    // todo: remove test argument
     constructor(test) {
       this.test = test;
     }
@@ -162,7 +166,7 @@
       if (!isOK) {
         info = [`Expected: ${expected}`, `Value: ${value}`];
       }
-      this.test.asserts.push({
+      this.test.assertions.push({
         result: isOK,
         description:
           descr || (isOK ? "values are equal" : "values are not equal"),
@@ -172,50 +176,55 @@
     }
   }
 
+  function describe(description, cb) {
+    if (typeof cb === "string") {
+      // nested describe definition
+      let nestedArgs = Array.from(arguments).slice(1);
+      return describe(description, () => describe(...nestedArgs));
+    }
+
+    // get correct suite, or create it
+    const parent = stack[stack.length - 1];
+    const path = parent
+      ? parent.path.slice().concat(description)
+      : [description];
+    const suite = new Suite(parent, description, path);
+
+    mutex = mutex.then(() => {
+      return suite.defineContent(cb);
+    });
+  }
+
+  describe.only = function restrict() {
+    nextIsOnly = true;
+    return describe(...arguments);
+  };
+
+  function test(description, runTest) {
+    const parent = stack[stack.length - 1];
+    return new Test(parent, description, runTest);
+  }
+
+  test.only = function restrict() {
+    nextIsOnly = true;
+    return test(...arguments);
+  };
+
   async function start() {
     await domReady; // may need dom for some tests
 
     state.started = true;
     bus.trigger("before-all");
 
-    if (state.onlyTest) {
-      await runTest(state.onlyTest);
-    } else if (state.onlySuite) {
-      await runSuite(state.onlySuite);
+    if (state.onlyJob) {
+      await state.onlyJob.run();
     } else {
       while (jobQueue.length) {
-        const suite = jobQueue.shift();
-        await runSuite(suite);
+        const job = jobQueue.shift();
+        await job.run();
       }
     }
     bus.trigger("after-all");
-  }
-
-  async function runSuite(suite) {
-    bus.trigger("before-suite", suite);
-    for (let test of suite.tests) {
-      await runTest(test);
-    }
-    for (let subSuite of suite.subSuites) {
-      await runSuite(subSuite);
-    }
-    state.doneSuiteNumber++;
-    bus.trigger("after-suite", suite);
-  }
-
-  async function runTest(test) {
-    const assert = new Assert(test);
-    bus.trigger("before-test", test);
-    let start = Date.now();
-
-    await test.runTest(assert);
-    test.duration = Date.now() - start;
-    state.doneTestNumber++;
-    if (!test.result) {
-      state.failedTestNumber++;
-    }
-
-    bus.trigger("after-test", test);
   }
 
   Object.assign(gTest, {
@@ -367,6 +376,7 @@
       color: #366097;
       font-weight: 700;
       cursor: pointer;
+      padding: 0px 5px;
     }
     .gtest-cell {
         padding: 5px;
@@ -408,7 +418,7 @@
   const tests = {};
 
   function addTestResult(test) {
-    const suite = test.suite;
+    const suite = test.parent;
     // header
     const header = document.createElement("div");
     header.classList.add("gtest-result-header");
@@ -416,8 +426,11 @@
     const result = document.createElement("span");
     result.classList.add("gtest-circle");
     result.classList.add(test.result ? "gtest-green" : "gtest-red");
-    const suitesHtml = `<span class="gtest-cell">${suite.fullPath}:</span>`;
-    const testHtml = `<span class="gtest-name" data-test-id="${test.id}">${test.description} (${test.asserts.length})</span>`;
+    const fullPath = suite ? suite.path.join(" > ") : "";
+    const suitesHtml = suite
+      ? `<span class="gtest-cell">${fullPath}:</span>`
+      : "";
+    const testHtml = `<span class="gtest-name" data-test-id="${test.id}">${test.description} (${test.assertions.length})</span>`;
     const durationHtml = `<span class="gtest-duration">${test.duration} ms</span>`;
     header.innerHTML = suitesHtml + testHtml + durationHtml;
     header.prepend(result);
@@ -443,7 +456,7 @@
         const results = document.createElement("div");
         results.classList.add("gtest-result-detail");
         let i = 1;
-        for (let assert of test.asserts) {
+        for (let assert of test.assertions) {
           const div = document.createElement("div");
           div.classList.add("gtest-result-line");
           const lineCls = assert.result
