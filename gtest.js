@@ -247,12 +247,22 @@
       </div>`;
 
     static style = `
-      body {
-        margin: 0
+      html {
+        height: 100%;
       }
+
+      body {
+        margin: 0;
+        height: 100%;
+      }
+
       .gtest-runner {
         font-family: sans-serif;
+        height: 100%;
+        display: grid;
+        grid-template-rows: 124px auto;
       }
+
       .gtest-panel {
           background-color: #eeeeee;
       }
@@ -329,6 +339,15 @@
       .gtest-reporting {
         padding-left: 20px;
         font-size: 14px;
+        overflow: auto;
+      }
+
+      .gtest-fixture {
+        position: absolute;
+        top: 124px;
+        left: 0;
+        right: 0;
+        bottom: 0;        
       }
 
       .gtest-result {
@@ -426,8 +445,9 @@
       });
 
       bus.addEventListener("before-test", (ev) => {
-        const description = ev.detail.description;
-        this.setStatusContent(`Running: ${description}`);
+        const { description, parent } = ev.detail;
+        const fullPath = parent ? parent.path.join(" > ") : "";
+        this.setStatusContent(`Running: ${fullPath}: ${description}`);
       });
 
       this.updateIdleStatus();
@@ -539,6 +559,30 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Miscellaneous
+  // ---------------------------------------------------------------------------
+
+  function getFixture() {
+    const div = document.createElement("div");
+    div.classList.add("gtest-fixture");
+    document.body.appendChild(div);
+    registerCleanup(() => div.remove());
+    return div;
+  }
+
+  const cleanupFns = [];
+
+  function registerCleanup(cleanupFn) {
+    cleanupFns.push(cleanupFn);
+  }
+
+  bus.addEventListener("after-test", () => {
+    while (cleanupFns.length) {
+      const fn = cleanupFns.pop();
+      fn();
+    }
+  });
+  // ---------------------------------------------------------------------------
   // Exported values
   // ---------------------------------------------------------------------------
   const runner = new TestRunner();
@@ -594,5 +638,7 @@
     describe,
     test,
     start,
+    getFixture,
+    registerCleanup,
   };
 })();

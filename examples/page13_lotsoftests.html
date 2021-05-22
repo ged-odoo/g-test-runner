@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang=en>
+<head>
+<meta charset=utf-8>
+<title>gTest</title>
+</head>
+<body>
+<script src="../gtest.js"></script>
+<script>
+(function () {
+
+const {describe, test, getFixture} = gTest;
+
+function wait(n) {
+    return new Promise(resolve => {
+        setTimeout(() => {
+            resolve();
+        }, n);
+    })
+}
+
+/**
+ * Simple generic test suite
+ */
+
+describe('suite1', () => {
+
+    for (let i = 0; i <= 100; i++) {
+
+        test(`some test ${i+1}`, async (assert) => {
+            await wait(50);
+            assert.equal(i, i);
+        });
+    }
+});
+
+describe('suite2', () => {
+
+for (let i = 0; i <= 100; i++) {
+
+    test(`some other test, ${i+1}`,async (assert) => {
+        await wait(50);
+        assert.equal(i, i);
+    });
+}
+});
+
+})();
+
+</script>
+</body>
+</html>

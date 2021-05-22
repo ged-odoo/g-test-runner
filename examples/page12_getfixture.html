@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang=en>
+<head>
+<meta charset=utf-8>
+<title>gTest</title>
+</head>
+<body>
+<script src="../gtest.js"></script>
+<script>
+(function () {
+
+const {describe, test, getFixture} = gTest;
+
+function wait(n) {
+    return new Promise(resolve => {
+        setTimeout(() => {
+            resolve();
+        }, n);
+    })
+}
+
+describe('show getFixture', () => {
+
+    test('uses a fixture', async (assert) => {
+        const fixture = getFixture();
+        const div = document.createElement("div");
+        div.classList.add("blip");
+        div.style = "background-color: red;width: 100px; height: 100px";
+        fixture.appendChild(div);
+        await wait(2000);
+
+        assert.equal(fixture.innerHTML, '<div class="blip" style="background-color: red; width: 100px; height: 100px;"></div>')
+    });
+
+});
+
+})();
+
+</script>
+</body>
+</html>
