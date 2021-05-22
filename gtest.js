@@ -13,12 +13,20 @@
 
   class Mutex {
     prom = Promise.resolve();
+
+    /**
+     * @param { () => Promise<void>} cb
+     */
     add(cb) {
       this.prom = this.prom.then(cb);
     }
   }
 
   class Bus extends EventTarget {
+    /**
+     * @param {string} name
+     * @param {any} payload
+     */
     trigger(name, payload) {
       this.dispatchEvent(new CustomEvent(name, { detail: payload }));
     }
@@ -33,17 +41,37 @@
 
   class TestRunner {
     mutex = new Mutex();
+    /** @type {Job[]} */
     roots = [];
+
+    /** @type {Job[]} */
     pendingJobs = [];
+
+    /** @type {Suite | null} */
     current = null;
+
+    /** @type {Job | null} */
     onlyJob = null;
+
+    /** @type {'ready' | 'running' | 'done'} */
     status = "ready";
 
+    /**
+     * @param {string} description
+     * @param {(assert: Assert) => void | Promise<void>} testFn
+     * @returns {Test}
+     */
     addTest(description, testFn) {
       const test = new Test(this.current, description, testFn);
       this.addJob(test);
+      return test;
     }
 
+    /**
+     * @param {string} description
+     * @param {() => any} describeFn
+     * @returns {Suite}
+     */
     addSuite(description, describeFn) {
       const suite = new Suite(this.current, description);
       this.addJob(suite);
@@ -53,8 +81,12 @@
         await describeFn();
         this.current = current;
       });
+      return suite;
     }
 
+    /**
+     * @param {Job} job
+     */
     addJob(job) {
       if (this.current) {
         this.current.addJob(job);
@@ -88,8 +120,14 @@
   class Job {
     static nextId = 1;
     id = Job.nextId++;
+
+    /** @type {Suite | null} */
     parent = null;
 
+    /**
+     * @param {Suite | null} parent
+     * @param {any} description
+     */
     constructor(parent, description) {
       this.parent = parent;
       this.description = description;
@@ -99,14 +137,22 @@
   }
 
   class Suite extends Job {
+    /** @type {Job[]} */
     jobs = [];
 
+    /**
+     * @param {Suite | null} parent
+     * @param {string} description
+     */
     constructor(parent, description) {
-      super(description);
+      super(parent, description);
       this.path = parent ? parent.path.concat(description) : [description];
       bus.trigger("suite-added", this);
     }
 
+    /**
+     * @param {Job} job
+     */
     addJob(job) {
       this.jobs.push(job);
     }
@@ -121,9 +167,17 @@
   }
 
   class Test extends Job {
+    /** @type {number} */
     duration = null;
+
+    /** @type {Assert | null} */
     assert = null;
 
+    /**
+     * @param {Suite | null} parent
+     * @param {string} description
+     * @param {(assert: Assert) => void} cb
+     */
     constructor(parent, description, cb) {
       super(parent, description);
       this.cb = cb;
@@ -141,9 +195,16 @@
   }
 
   class Assert {
+    /** @type {{ result: boolean; description: any; info: any[]; }[]} */
     assertions = [];
+
     result = true;
 
+    /**
+     * @param {any} value
+     * @param {any} expected
+     * @param {string} [descr]
+     */
     equal(value, expected, descr) {
       const isOK = value === expected;
       let info = [];
@@ -322,6 +383,9 @@
     statusMsg = "";
     tests = {};
 
+    /**
+     * @param {TestRunner} runner
+     */
     constructor(runner) {
       this.runner = runner;
       bus.addEventListener("test-added", () => this.testNumber++);
@@ -374,7 +438,11 @@
       bus.addEventListener("after-all", () => {
         const statusCls =
           this.failedTestNumber === 0 ? "gtest-green" : "gtest-red";
-        const status = `<span class="gtest-circle ${statusCls}" ></span> ${this.doneTestNumber} tests completed, with ${this.failedTestNumber} failed`;
+        const msg = `${this.doneTestNumber} tests completed in ${this.suiteNumber} suites`;
+        const errors = this.failedTestNumber
+          ? `, with ${this.failedTestNumber} failed`
+          : "";
+        const status = `<span class="gtest-circle ${statusCls}" ></span> ${msg}${errors}`;
         this.setStatusContent(status);
       });
 
@@ -383,6 +451,9 @@
       );
     }
 
+    /**
+     * @param {string} content
+     */
     setStatusContent(content) {
       if (content !== this.statusMsg) {
         this.statusPanel.innerHTML = content;
@@ -398,6 +469,9 @@
       }
     }
 
+    /**
+     * @param {Test} test
+     */
     addTestResult(test) {
       const suite = test.parent;
       this.tests[test.id] = test;
@@ -424,6 +498,9 @@
       this.reporting.appendChild(div);
     }
 
+    /**
+     * @param {Event} ev
+     */
     addDetailedTestResult(ev) {
       const testId = ev.target?.dataset?.testId;
       if (testId) {
@@ -468,6 +545,10 @@
   const ui = new ReportingUI(runner);
   ui.mount();
 
+  /**
+   * @param {any} description
+   * @param {{ (): void; (): void; }} [cb]
+   */
   function describe(description, cb) {
     if (typeof cb === "string") {
       // nested describe definition
@@ -478,18 +559,27 @@
     }
   }
 
-  describe.only = function restrict() {
-    // runner.nextIsOnly = true;
-    describe(...arguments);
+  describe.only = function restrict(description, cb) {
+    if (typeof cb === "string") {
+      let nestedArgs = Array.from(arguments).slice(1);
+      describe(description, () => describe.only(...nestedArgs));
+    } else {
+      const job = runner.addSuite(description, cb);
+      runner.onlyJob = job;
+    }
   };
 
+  /**
+   * @param {string} description
+   * @param {(assert: Assert) => void | Promise<void>} runTest
+   */
   function test(description, runTest) {
     runner.addTest(description, runTest);
   }
 
-  test.only = function restrict() {
-    // runner.nextIsOnly = true;
-    test(...arguments);
+  test.only = function restrict(description, runTest) {
+    const job = runner.addTest(description, runTest);
+    runner.onlyJob = job;
   };
 
   async function start() {
