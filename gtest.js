@@ -176,11 +176,11 @@
     /**
      * @param {Suite | null} parent
      * @param {string} description
-     * @param {(assert: Assert) => void} cb
+     * @param {(assert: Assert) => void} runTest
      */
-    constructor(parent, description, cb) {
+    constructor(parent, description, runTest) {
       super(parent, description);
-      this.cb = cb;
+      this.runTest = runTest;
       bus.trigger("test-added", this);
     }
 
@@ -188,14 +188,14 @@
       this.assert = new Assert();
       bus.trigger("before-test", this);
       let start = Date.now();
-      await this.cb(this.assert);
+      await this.runTest(this.assert);
       this.duration = Date.now() - start;
       bus.trigger("after-test", this);
     }
   }
 
   class Assert {
-    /** @type {{ result: boolean; description: any; info: any[]; }[]} */
+    /** @type {any[]} */
     assertions = [];
 
     result = true;
@@ -203,19 +203,18 @@
     /**
      * @param {any} value
      * @param {any} expected
-     * @param {string} [descr]
+     * @param {string} [msg]
      */
-    equal(value, expected, descr) {
+    equal(value, expected, msg) {
       const isOK = value === expected;
-      let info = [];
-      if (!isOK) {
-        info = [`Expected: ${expected}`, `Value: ${value}`];
-      }
+      const stack = isOK ? null : new Error().stack;
       this.assertions.push({
-        result: isOK,
-        description:
-          descr || (isOK ? "values are equal" : "values are not equal"),
-        info,
+        type: "equal",
+        pass: isOK,
+        expected,
+        value,
+        msg: msg || (isOK ? "values are equal" : "values are not equal"),
+        stack,
       });
       this.result = this.result && isOK;
     }
@@ -328,12 +327,28 @@
         top: 2px;
       }
 
-      .gtest-red {
-          background-color: darkred;
+      .gtest-darkred {
+        background-color: darkred;
       }
 
-      .gtest-green {
-          background-color: darkgreen;
+      .gtest-darkgreen {
+        background-color: darkgreen;
+      }
+
+      .gtest-text-darkred {
+        color: darkred;
+      }
+
+      .gtest-text-darkgreen {
+        color: darkgreen;
+      }
+
+      .gtest-text-red {
+        color: #EE5757;
+      }
+
+      .gtest-text-green {
+        color: green;
       }
 
       .gtest-reporting {
@@ -357,25 +372,37 @@
         margin: 5px;
       }
 
-      .gtest-result-success {
-        color: darkgreen;
-      }
-
-      .gtest-result-fail {
-        color: darkred;
-      }
-
       .gtest-result-header {
         padding: 4px 12px;
         cursor: default;
       }
 
       .gtest-result-detail {
-        padding-left: 60px;
+        padding-left: 30px;
       }
 
-      .gtest-result-detail-line {
-        padding-left: 60px;
+      .gtest-info-line {
+        display: grid;
+        grid-template-columns: 80px auto;
+        column-gap: 10px;
+        margin: 4px;
+      }
+
+      .gtest-info-line-left > span {
+        font-weight: bold;
+        float: right;
+      }
+
+      .gtest-stack {
+        font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        margin: 3px;
+        font-size: 12px;
+        line-height: 18px;  
+        color: #091124;
+      }
+
+      .gtest-fail {
+        background-color: #fff0f0;
       }
 
       .gtest-name {
@@ -457,7 +484,7 @@
 
       bus.addEventListener("after-all", () => {
         const statusCls =
-          this.failedTestNumber === 0 ? "gtest-green" : "gtest-red";
+          this.failedTestNumber === 0 ? "gtest-darkgreen" : "gtest-darkred";
         const msg = `${this.doneTestNumber} tests completed in ${this.suiteNumber} suites`;
         const errors = this.failedTestNumber
           ? `, with ${this.failedTestNumber} failed`
@@ -501,7 +528,9 @@
 
       const result = document.createElement("span");
       result.classList.add("gtest-circle");
-      result.classList.add(test.assert.result ? "gtest-green" : "gtest-red");
+      result.classList.add(
+        test.assert.result ? "gtest-darkgreen" : "gtest-darkred"
+      );
       const fullPath = suite ? suite.path.join(" > ") : "";
       const suitesHtml = suite
         ? `<span class="gtest-cell">${fullPath}:</span>`
@@ -515,6 +544,9 @@
       const div = document.createElement("div");
       div.classList.add("gtest-result");
       div.prepend(header);
+      if (!test.assert.result) {
+        div.classList.add("gtest-fail");
+      }
       this.reporting.appendChild(div);
     }
 
@@ -532,30 +564,71 @@
         } else {
           const results = document.createElement("div");
           results.classList.add("gtest-result-detail");
-          let i = 1;
-          for (let assert of test.assert.assertions) {
-            const div = document.createElement("div");
-            div.classList.add("gtest-result-line");
-            const lineCls = assert.result
-              ? "gtest-result-success"
-              : "gtest-result-fail";
-            div.classList.add(lineCls);
-            div.innerText = `${i++}. ${assert.description}`;
-            results.appendChild(div);
-            if (!assert.result) {
-              // add detailed informations
-              for (let info of assert.info) {
-                const div = document.createElement("div");
-                div.classList.add("gtest-result-detail-line");
-                div.innerText = info;
-                results.appendChild(div);
-              }
-            }
+          const assertions = test.assert.assertions;
+          for (let i = 0; i < assertions.length; i++) {
+            this.addAssertionInfo(results, i, assertions[i]);
           }
           resultDiv.appendChild(results);
         }
       }
     }
+
+    addAssertionInfo(parentEl, index, assertion) {
+      const div = document.createElement("div");
+      div.classList.add("gtest-result-line");
+      const lineCls = assertion.pass
+        ? "gtest-text-darkgreen"
+        : "gtest-text-darkred";
+      div.classList.add(lineCls);
+      div.innerText = `${index + 1}. ${assertion.msg}`;
+      parentEl.appendChild(div);
+      if (!assertion.pass) {
+        const stack = assertion.stack
+          .toString()
+          .split("\n")
+          .slice(1)
+          .join("\n");
+
+        switch (assertion.type) {
+          case "equal":
+            this.addInfoTable(parentEl, [
+              [
+                `<span class="gtest-text-green">Expected:</span>`,
+                `<span>${assertion.expected}</span>`,
+              ],
+              [
+                `<span class="gtest-text-red">Result:</span>`,
+                `<span>${assertion.value}</span>`,
+              ],
+              [
+                `<span class="gtest-text-darkred">Source:</span>`,
+                `<pre class="gtest-stack">${stack}</pre>`,
+              ],
+            ]);
+        }
+      }
+    }
+
+    addInfoTable(parentEl, lines) {
+      for (let [left, right] of lines) {
+        const line = makeEl("div", ["gtest-info-line"]);
+        const lDiv = makeEl("div", ["gtest-info-line-left"]);
+        lDiv.innerHTML = left;
+        line.appendChild(lDiv);
+        const rDiv = makeEl("div", []);
+        rDiv.innerHTML = right;
+        line.appendChild(rDiv);
+        parentEl.appendChild(line);
+      }
+    }
+  }
+
+  function makeEl(tag, classes) {
+    const elem = document.createElement(tag);
+    for (let cl of classes) {
+      elem.classList.add(cl);
+    }
+    return elem;
   }
 
   // ---------------------------------------------------------------------------
