@@ -9,10 +9,10 @@
 <script>
 (function () {
 
-const {describe, test, registerCleanup} = gTest;
+const {suite, test, registerCleanup} = gTest;
 
 
-describe('cleanup system demo', () => {
+suite('cleanup system demo', () => {
 
     test('uses a fixture', async (assert) => {
         const a = 1;

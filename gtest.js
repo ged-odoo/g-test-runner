@@ -77,17 +77,17 @@
 
     /**
      * @param {string} description
-     * @param {() => any} describeFn
+     * @param {() => any} suiteFn
      * @returns {Suite}
      */
-    addSuite(description, describeFn) {
+    addSuite(description, suiteFn) {
       const suite = new Suite(this.current, description);
       this.addJob(suite);
       this.mutex.add(async () => {
         const current = this.current;
         this.current = suite;
         try {
-          await describeFn();
+          await suiteFn();
         } catch (e) {
           throw e;
         } finally {
@@ -787,20 +787,20 @@
    * @param {any} description
    * @param {{ (): void; (): void; }} [cb]
    */
-  function describe(description, cb) {
+  function suite(description, cb) {
     if (typeof cb === "string") {
-      // nested describe definition
+      // nested suite definition
       let nestedArgs = Array.from(arguments).slice(1);
-      describe(description, () => describe(...nestedArgs));
+      suite(description, () => suite(...nestedArgs));
     } else {
       runner.addSuite(description, cb);
     }
   }
 
-  describe.only = function restrict(description, cb) {
+  suite.only = function restrict(description, cb) {
     if (typeof cb === "string") {
       let nestedArgs = Array.from(arguments).slice(1);
-      describe(description, () => describe.only(...nestedArgs));
+      suite(description, () => suite.only(...nestedArgs));
     } else {
       const job = runner.addSuite(description, cb);
       runner.onlyJob = job;
@@ -830,7 +830,7 @@
       ui,
     },
     config: TestRunner.config,
-    describe,
+    suite,
     test,
     start,
     getFixture,

@@ -9,13 +9,13 @@
 <script>
 (function () {
 
-const {describe, test} = gTest;
+const {suite, test} = gTest;
 
 /**
  * Simple generic test suite
  */
 
-describe('demo for timeout', () => {
+suite('demo for timeout', () => {
 
     test('this test will timeout', (assert) => {
         assert.equal(1 + 2, 3);

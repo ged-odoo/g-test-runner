@@ -9,7 +9,7 @@
 <script>
 (async function () {
 
-const {describe, test} = gTest;
+const {suite, test} = gTest;
 
 /**
  * We add here a test suite while the runner is running. We expect the
@@ -25,7 +25,7 @@ function wait(n) {
     })
 }
 
-describe('math', () => {
+suite('math', () => {
 
     test('simple addition', async (assert) => {
         await wait(1000);
@@ -47,7 +47,7 @@ gTest.start();
 
 await wait(1000); // so next suite is defined after runner is starting
 
-describe('utils', () => {
+suite('utils', () => {
 
     test('first test', assert => {
         assert.equal(1 + 1, 2);

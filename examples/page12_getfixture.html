@@ -9,7 +9,7 @@
 <script>
 (function () {
 
-const {describe, test, getFixture} = gTest;
+const {suite, test, getFixture} = gTest;
 
 function wait(n) {
     return new Promise(resolve => {
@@ -19,7 +19,7 @@ function wait(n) {
     })
 }
 
-describe('show getFixture', () => {
+suite('show getFixture', () => {
 
     test('uses a fixture', async (assert) => {
         const fixture = getFixture();

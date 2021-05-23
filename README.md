@@ -5,7 +5,7 @@ A simple javascript test runner (for browser only)
 ## Example
 
 ```js
-describe('math', () => {
+suite('math', () => {
 
     test('simple addition', (assert) => {
         assert.equal(1 + 1, 2);

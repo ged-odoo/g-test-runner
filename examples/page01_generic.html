@@ -9,13 +9,13 @@
 <script>
 (function () {
 
-const {describe, test} = gTest;
+const {suite, test} = gTest;
 
 /**
  * Simple generic test suite
  */
 
-describe('math', () => {
+suite('math', () => {
 
     test('simple addition', (assert) => {
         assert.equal(1 + 1, 2, "1 + 1 should be equal to 2");
@@ -29,7 +29,7 @@ describe('math', () => {
 });
 
 
-describe('utils', () => {
+suite('utils', () => {
 
     test('first test', assert => {
         assert.equal(1 + 1, 2);
@@ -39,7 +39,7 @@ describe('utils', () => {
         assert.equal(3 + (-1), 2);
     });
 
-    describe('sub suite', () => {
+    suite('sub suite', () => {
 
         test('something is happening', assert => {
             assert.ok(0, 'hey');

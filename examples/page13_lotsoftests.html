@@ -9,7 +9,7 @@
 <script>
 (function () {
 
-const {describe, test, getFixture} = gTest;
+const {suite, test, getFixture} = gTest;
 
 function wait(n) {
     return new Promise(resolve => {
@@ -23,7 +23,7 @@ function wait(n) {
  * Simple generic test suite
  */
 
-describe('suite1', () => {
+suite('suite1', () => {
 
     for (let i = 0; i <= 100; i++) {
 
@@ -34,7 +34,7 @@ describe('suite1', () => {
     }
 });
 
-describe('suite2', () => {
+suite('suite2', () => {
 
 for (let i = 0; i <= 100; i++) {
 

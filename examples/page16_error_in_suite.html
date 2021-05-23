@@ -9,13 +9,13 @@
 <script>
 (function () {
 
-const {describe, test} = gTest;
+const {suite, test} = gTest;
 
 /**
  * Simple generic test suite
  */
 
-describe('error in a describe function', () => {
+suite('error in a suite function', () => {
 
     test('this test will pass', (assert) => {
         assert.equal(1 + 2, 3);

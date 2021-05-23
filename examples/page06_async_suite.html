@@ -9,12 +9,12 @@
 <script>
 (async function () {
 
-const {describe, test} = gTest;
+const {suite, test} = gTest;
 
 /**
- * This example shows async describe: they can take a while to do their job,
+ * This example shows async suite: they can take a while to do their job,
  * and so, we need to make sure that the tests defined inside are correctly
- * associated to the suite. This means that we serialize all describe calls.
+ * associated to the suite. This means that we serialize all suite calls.
  */
 
 function wait(n) {
@@ -25,7 +25,7 @@ function wait(n) {
     })
 }
 
-describe('suite 1', async () => {
+suite('suite 1', async () => {
 
     await wait(100);
 
@@ -40,7 +40,7 @@ describe('suite 1', async () => {
     });
 });
 
-describe('suite 2', async () => {
+suite('suite 2', async () => {
 
     await wait(50);
 
@@ -55,7 +55,7 @@ describe('suite 2', async () => {
     });
 });
 
-describe('suite 3', async () => {
+suite('suite 3', async () => {
 
     await wait(110);
 
