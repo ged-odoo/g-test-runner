@@ -44,6 +44,10 @@
   // ---------------------------------------------------------------------------
 
   class TestRunner {
+    static config = {
+      timeout: 10000,
+    };
+
     mutex = new Mutex();
     /** @type {Job[]} */
     roots = [];
@@ -175,6 +179,10 @@
     }
   }
 
+  class TimeoutError extends Error {
+    name = "TimeoutError";
+  }
+
   class Test extends Job {
     /** @type {number} */
     duration = null;
@@ -200,8 +208,17 @@
       const assert = new Assert();
       bus.trigger("before-test", this);
       let start = Date.now();
+      let timeOut = new Promise((resolve, reject) => {
+        setTimeout(() => {
+          reject(
+            new TimeoutError(
+              `test took longer than ${TestRunner.config.timeout}ms`
+            )
+          );
+        }, TestRunner.config.timeout);
+      });
       try {
-        await this.runTest(assert);
+        await Promise.race([timeOut, this.runTest(assert)]);
         this.pass = assert.result;
       } catch (e) {
         this.error = e;
@@ -740,6 +757,7 @@
       runner,
       ui,
     },
+    config: TestRunner.config,
     describe,
     test,
     start,

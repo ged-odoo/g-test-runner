@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang=en>
+<head>
+<meta charset=utf-8>
+<title>gTest</title>
+</head>
+<body>
+<script src="../gtest.js"></script>
+<script>
+(function () {
+
+const {describe, test} = gTest;
+
+/**
+ * Simple generic test suite
+ */
+
+describe('demo for timeout', () => {
+
+    test('this test will timeout', (assert) => {
+        assert.equal(1 + 2, 3);
+        return new Promise(() => {});
+    });
+});
+
+})();
+
+</script>
+</body>
+</html>
