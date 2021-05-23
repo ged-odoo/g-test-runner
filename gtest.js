@@ -297,6 +297,10 @@
             <button class="gtest-btn gtest-start">Start</button>
             <button class="gtest-btn" disabled="disabled">Abort</button>
             <button class="gtest-btn">Rerun all</button>
+            <div class="gtest-hidepassed">
+              <input type="checkbox" id="gtest-hidepassed">
+              <label for="gtest-hidepassed">Hide passed tests</label>
+            </div>
           </div>
           <div class="gtest-status">
           </div>
@@ -369,6 +373,11 @@
         line-height: 45px;
         padding-left: 8px;
       }
+
+      .gtest-hidepassed {
+        display: inline-block;
+      }
+
       .gtest-status {
         background-color: #D2E0E6;
         height: 30px;
@@ -414,6 +423,10 @@
         padding-left: 20px;
         font-size: 14px;
         overflow: auto;
+      }
+
+      .gtest-reporting.gtest-hidepassed .gtest-result:not(.gtest-fail) {
+        display: none;
       }
 
       .gtest-fixture {
@@ -488,6 +501,7 @@
     statusMsg = "";
     tests = {};
     testIndex = 1;
+    hidePassed = false;
 
     /**
      * @param {TestRunner} runner
@@ -520,6 +534,9 @@
       this.statusPanel = document.getElementsByClassName("gtest-status")[0];
       this.startBtn = document.getElementsByClassName("gtest-start")[0];
       this.reporting = document.getElementsByClassName("gtest-reporting")[0];
+      this.hidePassedCheckbox = document.querySelector(
+        ".gtest-panel .gtest-hidepassed input"
+      );
 
       // ui event handlers
       this.startBtn.addEventListener("click", () => {
@@ -559,8 +576,20 @@
       this.reporting.addEventListener("click", (ev) =>
         this.addDetailedTestResult(ev)
       );
+
+      this.hidePassedCheckbox.addEventListener("change", () => {
+        this.toggleHidePassedTests();
+      });
     }
 
+    toggleHidePassedTests() {
+      this.hidePassed = !this.hidePassed;
+      if (this.hidePassed) {
+        this.reporting.classList.add("gtest-hidepassed");
+      } else {
+        this.reporting.classList.remove("gtest-hidepassed");
+      }
+    }
     /**
      * @param {string} content
      */
