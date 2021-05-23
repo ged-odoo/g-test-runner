@@ -109,20 +109,31 @@
       }
     }
 
-    async runAll() {
+    async start() {
       await domReady; // may need dom for some tests
+      if (this.status !== "ready") {
+        return;
+      }
       this.status = "running";
       bus.trigger("before-all");
       if (this.onlyJob) {
         await this.onlyJob.run();
       } else {
         while (this.pendingJobs.length) {
+          if (this.status !== "running") {
+            break;
+          }
           const job = this.pendingJobs.shift();
           await job.run();
         }
       }
       bus.trigger("after-all");
       this.status = "done";
+    }
+
+    stop() {
+      this.status = "done";
+      bus.trigger("abort");
     }
   }
 
@@ -152,6 +163,7 @@
   class Suite extends Job {
     /** @type {Job[]} */
     jobs = [];
+    status = "ready";
 
     /**
      * @param {Suite | null} parent
@@ -161,6 +173,7 @@
       super(parent, description);
       this.path = parent ? parent.path.concat(description) : [description];
       bus.trigger("suite-added", this);
+      bus.addEventListener("abort", () => (this.status = "abort"));
     }
 
     /**
@@ -173,7 +186,9 @@
     async run() {
       bus.trigger("before-suite", this);
       for (let job of this.jobs) {
-        await job.run();
+        if (this.status === "ready") {
+          await job.run();
+        }
       }
       bus.trigger("after-suite", this);
     }
@@ -295,7 +310,7 @@
           </div>
           <div class="gtest-panel-main">
             <button class="gtest-btn gtest-start">Start</button>
-            <button class="gtest-btn" disabled="disabled">Abort</button>
+            <button class="gtest-btn gtest-abort" disabled="disabled">Abort</button>
             <button class="gtest-btn">Rerun all</button>
             <div class="gtest-hidepassed">
               <input type="checkbox" id="gtest-hidepassed">
@@ -309,13 +324,8 @@
       </div>`;
 
     static style = `
-      html {
-        height: 100%;
-      }
-
       body {
         margin: 0;
-        height: 100%;
       }
 
       .gtest-runner {
@@ -323,6 +333,11 @@
         height: 100%;
         display: grid;
         grid-template-rows: 124px auto;
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        right: 0;
       }
 
       .gtest-panel {
@@ -481,7 +496,6 @@
         color: #366097;
         font-weight: 700;
         cursor: pointer;
-        padding: 0px 5px;
       }
       .gtest-cell {
           padding: 5px;
@@ -535,6 +549,7 @@
       // key dom elements
       this.statusPanel = document.getElementsByClassName("gtest-status")[0];
       this.startBtn = document.getElementsByClassName("gtest-start")[0];
+      this.abortBtn = document.getElementsByClassName("gtest-abort")[0];
       this.reporting = document.getElementsByClassName("gtest-reporting")[0];
       this.hidePassedCheckbox = document.querySelector(
         ".gtest-panel .gtest-hidepassed input"
@@ -547,12 +562,17 @@
 
       // ui event handlers
       this.startBtn.addEventListener("click", () => {
-        this.runner.runAll();
+        this.runner.start();
+      });
+
+      this.abortBtn.addEventListener("click", () => {
+        this.runner.stop();
       });
 
       // business event handlers
       bus.addEventListener("before-all", () => {
         this.startBtn.setAttribute("disabled", "disabled");
+        this.abortBtn.removeAttribute("disabled");
       });
 
       bus.addEventListener("before-test", (ev) => {
@@ -567,6 +587,7 @@
       });
 
       bus.addEventListener("after-all", () => {
+        this.abortBtn.setAttribute("disabled", "disabled");
         const statusCls =
           this.failedTestNumber === 0 ? "gtest-darkgreen" : "gtest-darkred";
         const msg = `${this.doneTestNumber} tests completed in ${this.suiteNumber} suites`;
@@ -603,7 +624,7 @@
         location.href.split(location.search || "?")[0] +
         "?" +
         params.toString();
-      history.pushState({ path: newurl }, "", newurl);
+      history.replaceState({ path: newurl }, "", newurl);
     }
     /**
      * @param {string} content
@@ -637,7 +658,7 @@
       const result = document.createElement("span");
       result.classList.add("gtest-circle");
       result.classList.add(test.pass ? "gtest-darkgreen" : "gtest-darkred");
-      const fullPath = suite ? suite.path.join(" > ") + ":" : "";
+      const fullPath = suite ? suite.path.join(" > ") + " >" : "";
       const suitesHtml = `<span class="gtest-cell">${index}. ${
         suite ? fullPath : ""
       }</span>`;
@@ -821,7 +842,7 @@
   };
 
   async function start() {
-    runner.runAll();
+    runner.start();
   }
 
   window.gTest = {
