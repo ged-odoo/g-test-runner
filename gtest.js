@@ -18,7 +18,11 @@
      * @param { () => Promise<void>} cb
      */
     add(cb) {
-      this.prom = this.prom.then(cb);
+      this.prom = this.prom.then(() => {
+        return new Promise((resolve) => {
+          cb().finally(resolve);
+        });
+      });
     }
   }
 
@@ -78,8 +82,13 @@
       this.mutex.add(async () => {
         const current = this.current;
         this.current = suite;
-        await describeFn();
-        this.current = current;
+        try {
+          await describeFn();
+        } catch (e) {
+          throw e;
+        } finally {
+          this.current = current;
+        }
       });
       return suite;
     }
@@ -540,10 +549,10 @@
       const result = document.createElement("span");
       result.classList.add("gtest-circle");
       result.classList.add(test.pass ? "gtest-darkgreen" : "gtest-darkred");
-      const fullPath = suite ? suite.path.join(" > ") : "";
-      const suitesHtml = suite
-        ? `<span class="gtest-cell">${index}. ${fullPath}:</span>`
-        : "";
+      const fullPath = suite ? suite.path.join(" > ") + ":" : "";
+      const suitesHtml = `<span class="gtest-cell">${index}. ${
+        suite ? fullPath : ""
+      }</span>`;
       const testHtml = `<span class="gtest-name" data-index="${index}">${test.description} (${test.assertions.length})</span>`;
       const durationHtml = `<span class="gtest-duration">${test.duration} ms</span>`;
       header.innerHTML = suitesHtml + testHtml + durationHtml;

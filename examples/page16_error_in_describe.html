@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang=en>
+<head>
+<meta charset=utf-8>
+<title>gTest</title>
+</head>
+<body>
+<script src="../gtest.js"></script>
+<script>
+(function () {
+
+const {describe, test} = gTest;
+
+/**
+ * Simple generic test suite
+ */
+
+describe('error in a describe function', () => {
+
+    test('this test will pass', (assert) => {
+        assert.equal(1 + 2, 3);
+    });
+
+    throw new Error("boom");
+
+    test('this test will not be run', (assert) => {
+        assert.equal(1 + 2, 3);
+    });
+});
+
+
+test('this test should pass', (assert) => {
+    assert.equal(1 + 2, 3);
+});
+
+})();
+
+</script>
+</body>
+</html>
