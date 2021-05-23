@@ -549,8 +549,11 @@
         const errors = this.failedTestNumber
           ? `, with ${this.failedTestNumber} failed`
           : "";
-        const status = `<span class="gtest-circle ${statusCls}" ></span> ${msg}${errors}`;
+        const status = `<span class="gtest-circle ${statusCls}"></span> ${msg}${errors}`;
         this.setStatusContent(status);
+        if (this.failedTestNumber > 0) {
+          document.title = `✖ ${document.title}`;
+        }
       });
 
       this.reporting.addEventListener("click", (ev) =>

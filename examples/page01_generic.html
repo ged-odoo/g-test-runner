@@ -24,6 +24,7 @@ describe('math', () => {
 
     test('addition with negative number', (assert) => {
         assert.equal(3 + (-1), 2);
+        assert.ok(true, "this work!")
     });
 });
 
@@ -37,6 +38,17 @@ describe('utils', () => {
     test('snd test', assert => {
         assert.equal(3 + (-1), 2);
     });
+
+    describe('sub suite', () => {
+
+        test('something is happening', assert => {
+            assert.ok(0, 'hey');
+        });
+
+        test('blabla', assert => {
+            assert.ok(1, 'hey');
+        });
+    })
 });
 
 })();
