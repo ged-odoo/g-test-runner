@@ -387,7 +387,7 @@
       }
 
       .gtest-result-detail {
-        padding-left: 30px;
+        padding-left: 40px;
       }
 
       .gtest-info-line {
@@ -437,6 +437,7 @@
     doneTestNumber = 0;
     statusMsg = "";
     tests = {};
+    testIndex = 1;
 
     /**
      * @param {TestRunner} runner
@@ -530,7 +531,8 @@
      */
     addTestResult(test) {
       const suite = test.parent;
-      this.tests[test.id] = test;
+      const index = this.testIndex++;
+      this.tests[index] = test;
       // header
       const header = document.createElement("div");
       header.classList.add("gtest-result-header");
@@ -540,9 +542,9 @@
       result.classList.add(test.pass ? "gtest-darkgreen" : "gtest-darkred");
       const fullPath = suite ? suite.path.join(" > ") : "";
       const suitesHtml = suite
-        ? `<span class="gtest-cell">${fullPath}:</span>`
+        ? `<span class="gtest-cell">${index}. ${fullPath}:</span>`
         : "";
-      const testHtml = `<span class="gtest-name" data-test-id="${test.id}">${test.description} (${test.assertions.length})</span>`;
+      const testHtml = `<span class="gtest-name" data-index="${index}">${test.description} (${test.assertions.length})</span>`;
       const durationHtml = `<span class="gtest-duration">${test.duration} ms</span>`;
       header.innerHTML = suitesHtml + testHtml + durationHtml;
       header.prepend(result);
@@ -561,9 +563,9 @@
      * @param {Event} ev
      */
     addDetailedTestResult(ev) {
-      const testId = ev.target?.dataset?.testId;
-      if (testId) {
-        const test = this.tests[testId];
+      const index = ev.target?.dataset?.index;
+      if (index) {
+        const test = this.tests[index];
         const resultDiv = ev.target.closest(".gtest-result");
         const detailDiv = resultDiv.querySelector(".gtest-result-detail");
         if (detailDiv) {
@@ -580,7 +582,7 @@
               "gtest-result-line",
               "gtest-text-darkred",
             ]);
-            div.innerText = "Died on test";
+            div.innerText = `Died on test #${index}`;
             results.appendChild(div);
             this.addInfoTable(results, [
               [
