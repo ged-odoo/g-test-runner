@@ -501,7 +501,6 @@
     statusMsg = "";
     tests = {};
     testIndex = 1;
-    hidePassed = false;
 
     /**
      * @param {TestRunner} runner
@@ -517,6 +516,9 @@
           this.failedTestNumber++;
         }
       });
+
+      const searchparams = new URLSearchParams(location.search);
+      this.hidePassed = searchparams.has("hidepassed");
     }
 
     async mount() {
@@ -537,6 +539,11 @@
       this.hidePassedCheckbox = document.querySelector(
         ".gtest-panel .gtest-hidepassed input"
       );
+
+      if (this.hidePassed) {
+        this.hidePassedCheckbox.checked = true;
+        this.reporting.classList.add("gtest-hidepassed");
+      }
 
       // ui event handlers
       this.startBtn.addEventListener("click", () => {
@@ -584,11 +591,19 @@
 
     toggleHidePassedTests() {
       this.hidePassed = !this.hidePassed;
+      const params = new URLSearchParams(location.search);
       if (this.hidePassed) {
         this.reporting.classList.add("gtest-hidepassed");
+        params.set("hidepassed", 1);
       } else {
         this.reporting.classList.remove("gtest-hidepassed");
+        params.delete("hidepassed");
       }
+      let newurl =
+        location.href.split(location.search || "?")[0] +
+        "?" +
+        params.toString();
+      history.pushState({ path: newurl }, "", newurl);
     }
     /**
      * @param {string} content
