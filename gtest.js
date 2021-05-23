@@ -208,13 +208,18 @@
       const assert = new Assert();
       bus.trigger("before-test", this);
       let start = Date.now();
+      let isComplete = false;
       let timeOut = new Promise((resolve, reject) => {
         setTimeout(() => {
-          reject(
-            new TimeoutError(
-              `test took longer than ${TestRunner.config.timeout}ms`
-            )
-          );
+          if (isComplete) {
+            resolve();
+          } else {
+            reject(
+              new TimeoutError(
+                `test took longer than ${TestRunner.config.timeout}ms`
+              )
+            );
+          }
         }, TestRunner.config.timeout);
       });
       try {
@@ -223,6 +228,7 @@
       } catch (e) {
         this.error = e;
       }
+      isComplete = true;
       this.assertions = assert.assertions;
       this.duration = Date.now() - start;
       bus.trigger("after-test", this);
@@ -249,6 +255,24 @@
         expected,
         value,
         msg: msg || (isOK ? "values are equal" : "values are not equal"),
+        stack,
+      });
+      this.result = this.result && isOK;
+    }
+
+    /**
+     * @param {any} value
+     * @param {string} [msg]
+     */
+    ok(value, msg) {
+      const isOK = Boolean(value);
+      const stack = isOK ? null : new Error().stack;
+      this.assertions.push({
+        type: "ok",
+        pass: isOK,
+        value,
+        expected: "true",
+        msg: msg || (isOK ? "value is truthy" : "value is not truthy"),
         stack,
       });
       this.result = this.result && isOK;
@@ -640,6 +664,7 @@
 
         switch (assertion.type) {
           case "equal":
+          case "ok":
             this.addInfoTable(parentEl, [
               [
                 `<span class="gtest-text-green">Expected:</span>`,
