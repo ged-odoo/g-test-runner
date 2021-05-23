@@ -170,13 +170,16 @@
     /** @type {number} */
     duration = null;
 
-    /** @type {Assert | null} */
-    assert = null;
+    /** @type {any[]} */
+    assertions = [];
+
+    error = null;
+    pass = false;
 
     /**
      * @param {Suite | null} parent
      * @param {string} description
-     * @param {(assert: Assert) => void} runTest
+     * @param {(assert: Assert) => void | Promise<void>} runTest
      */
     constructor(parent, description, runTest) {
       super(parent, description);
@@ -185,10 +188,16 @@
     }
 
     async run() {
-      this.assert = new Assert();
+      const assert = new Assert();
       bus.trigger("before-test", this);
       let start = Date.now();
-      await this.runTest(this.assert);
+      try {
+        await this.runTest(assert);
+        this.pass = assert.result;
+      } catch (e) {
+        this.error = e;
+      }
+      this.assertions = assert.assertions;
       this.duration = Date.now() - start;
       bus.trigger("after-test", this);
     }
@@ -439,7 +448,7 @@
       bus.addEventListener("after-test", (ev) => {
         const test = ev.detail;
         this.doneTestNumber++;
-        if (!test.assert.result) {
+        if (!test.pass) {
           this.failedTestNumber++;
         }
       });
@@ -528,14 +537,12 @@
 
       const result = document.createElement("span");
       result.classList.add("gtest-circle");
-      result.classList.add(
-        test.assert.result ? "gtest-darkgreen" : "gtest-darkred"
-      );
+      result.classList.add(test.pass ? "gtest-darkgreen" : "gtest-darkred");
       const fullPath = suite ? suite.path.join(" > ") : "";
       const suitesHtml = suite
         ? `<span class="gtest-cell">${fullPath}:</span>`
         : "";
-      const testHtml = `<span class="gtest-name" data-test-id="${test.id}">${test.description} (${test.assert.assertions.length})</span>`;
+      const testHtml = `<span class="gtest-name" data-test-id="${test.id}">${test.description} (${test.assertions.length})</span>`;
       const durationHtml = `<span class="gtest-duration">${test.duration} ms</span>`;
       header.innerHTML = suitesHtml + testHtml + durationHtml;
       header.prepend(result);
@@ -544,7 +551,7 @@
       const div = document.createElement("div");
       div.classList.add("gtest-result");
       div.prepend(header);
-      if (!test.assert.result) {
+      if (!test.pass) {
         div.classList.add("gtest-fail");
       }
       this.reporting.appendChild(div);
@@ -564,9 +571,23 @@
         } else {
           const results = document.createElement("div");
           results.classList.add("gtest-result-detail");
-          const assertions = test.assert.assertions;
+          const assertions = test.assertions;
           for (let i = 0; i < assertions.length; i++) {
             this.addAssertionInfo(results, i, assertions[i]);
+          }
+          if (test.error) {
+            const div = makeEl("div", [
+              "gtest-result-line",
+              "gtest-text-darkred",
+            ]);
+            div.innerText = "Died on test";
+            results.appendChild(div);
+            this.addInfoTable(results, [
+              [
+                `<span class="gtest-text-darkred">Source:</span>`,
+                `<pre class="gtest-stack">${test.error.stack}</pre>`,
+              ],
+            ]);
           }
           resultDiv.appendChild(results);
         }
