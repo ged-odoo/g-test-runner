@@ -571,12 +571,17 @@
       }
 
       .gtest-result-header a {
-        padding: 4px;
-          color: #C2CCD1;
-          text-decoration: none;
+        text-decoration: none;
       }
 
-      .gtest-result-header a:hover {
+      .gtest-result-header .gtest-open {
+        padding: 4px;
+        color: #C2CCD1;
+        padding-right: 50px;
+      }
+      
+      .gtest-result-header .gtest-open:hover {
+        font-weight: bold;
         color: black;
       }
 
@@ -799,14 +804,14 @@
       const suitesHtml = `<span class="gtest-cell">${index}. ${
         suite ? fullPath : ""
       }</span>`;
-      const testHtml = `<span class="gtest-name" data-index="${index}">${test.description} (${test.assertions.length})</span>`;
 
       params = new URLSearchParams(location.search);
       params.set("testId", test.hash);
       const url = getUrlWithParams(params);
-      const rerunLink = `<a href="${url}">Rerun</a>`;
+      const testHtml = `<a class="gtest-name" href="${url}">${test.description} (${test.assertions.length})</a>`;
+      const openBtn = `<span class="gtest-open" data-index="${index}">Open</span>`;
       const durationHtml = `<span class="gtest-duration">${test.duration} ms</span>`;
-      header.innerHTML = suitesHtml + testHtml + rerunLink + durationHtml;
+      header.innerHTML = suitesHtml + testHtml + openBtn + durationHtml;
       header.prepend(result);
 
       // test result div
