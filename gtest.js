@@ -29,7 +29,7 @@
 
     // Convert the possibly negative integer hash code into an 8 character hex string, which isn't
     // strictly necessary but increases user understanding that the id is a SHA-like hash
-    var hex = (0x100000000 + hash).toString(16);
+    let hex = (0x100000000 + hash).toString(16);
     if (hex.length < 8) {
       hex = "0000000" + hex;
     }
@@ -37,13 +37,7 @@
   }
 
   function getUrlWithParams(params) {
-    const query = new URLSearchParams(location.search);
-    for (let key in params) {
-      query.set(key, params[key]);
-    }
-    return (
-      location.href.split(location.search || "?")[0] + "?" + query.toString()
-    );
+    return `${location.pathname}${params.toString()}${location.hash}`;
   }
 
   class Mutex {
@@ -102,12 +96,11 @@
     hasFilter = false;
 
     addFilter(filter = {}) {
+      this.hasFilter = true;
       if (filter.testHash) {
-        this.hasFilter = true;
         this.testHash = filter.testHash;
       }
       if (filter.suiteHash) {
-        this.hasFilter = true;
         this.suiteHash = filter.suiteHash;
       }
     }
@@ -368,7 +361,7 @@
           <div class="gtest-panel-main">
             <button class="gtest-btn gtest-start">Start</button>
             <button class="gtest-btn gtest-abort" disabled="disabled">Abort</button>
-            <button class="gtest-btn">Rerun all</button>
+            <button class="gtest-btn gtest-rerun"><a href="">Rerun all</a></button>
             <div class="gtest-hidepassed">
               <input type="checkbox" id="gtest-hidepassed">
               <label for="gtest-hidepassed">Hide passed tests</label>
@@ -414,7 +407,7 @@
       }
 
       .gtest-btn {
-        height: 30px;
+        height: 32px;
         background-color:#768d87;
         border-radius:4px;
         border:1px solid #566963;
@@ -440,6 +433,18 @@
         opacity: 0.4;
       }
       
+      .gtest-rerun {
+        padding: 0;
+      }
+
+      .gtest-rerun a {
+        padding: 0px 12px;
+        line-height: 30px;
+        display: inline-block;
+        text-decoration: none;
+        color: white;
+      }
+
       .gtest-panel-main {
         height: 45px;
         line-height: 45px;
@@ -627,6 +632,13 @@
         this.reporting.classList.add("gtest-hidepassed");
       }
 
+      const rerunLink = document.querySelector(".gtest-rerun a");
+      const params = new URLSearchParams(location.search);
+      params.delete("testId");
+      params.delete("suiteId");
+      const href = `${location.pathname}${params.toString()}${location.hash}`;
+      rerunLink.setAttribute("href", href);
+
       // ui event handlers
       this.startBtn.addEventListener("click", () => {
         this.runner.start();
@@ -690,10 +702,7 @@
         this.reporting.classList.remove("gtest-hidepassed");
         params.delete("hidepassed");
       }
-      let newurl =
-        location.href.split(location.search || "?")[0] +
-        "?" +
-        params.toString();
+      const newurl = getUrlWithParams(params);
       history.replaceState({ path: newurl }, "", newurl);
     }
     /**
@@ -737,7 +746,9 @@
       }</span>`;
       const testHtml = `<span class="gtest-name" data-index="${index}">${test.description} (${test.assertions.length})</span>`;
 
-      const url = getUrlWithParams({ testId: test.hash });
+      const params = new URLSearchParams(location.search);
+      params.set("testId", test.hash);
+      const url = getUrlWithParams(params);
       const rerunLink = `<a href="${url}">Rerun</a>`;
       const durationHtml = `<span class="gtest-duration">${test.duration} ms</span>`;
       header.innerHTML = suitesHtml + testHtml + rerunLink + durationHtml;
