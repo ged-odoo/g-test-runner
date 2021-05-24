@@ -404,7 +404,7 @@
             <span class="gtest-logo">gTest</span>
           </div>
           <div class="gtest-panel-main">
-            <button class="gtest-btn gtest-abort" disabled="disabled">Abort</button>
+            <button class="gtest-btn gtest-abort">Start</button>
             <button class="gtest-btn gtest-rerun"><a href="">Rerun all</a></button>
             <div class="gtest-hidepassed">
               <input type="checkbox" id="gtest-hidepassed">
@@ -701,12 +701,16 @@
       // ui event handlers
 
       this.abortBtn.addEventListener("click", () => {
-        this.runner.stop();
+        if (this.runner.status === "ready") {
+          this.runner.start();
+        } else {
+          this.runner.stop();
+        }
       });
 
       // business event handlers
       bus.addEventListener("before-all", () => {
-        this.abortBtn.removeAttribute("disabled");
+        this.abortBtn.textContent = "Abort";
       });
 
       bus.addEventListener("before-test", (ev) => {
