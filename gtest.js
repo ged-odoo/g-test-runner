@@ -190,7 +190,7 @@
         for (let job of jobs) {
           if (job instanceof Suite) {
             let search = findJobs(hash, job.jobs);
-            if (search) {
+            if (search.length) {
               return search;
             }
           }
