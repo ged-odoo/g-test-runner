@@ -11,6 +11,41 @@
     }
   });
 
+  /**
+   * Based on Java's String.hashCode, a simple but not
+   * rigorously collision resistant hashing function
+   *
+   * @param {string[]} strings
+   * @returns
+   */
+  function generateHash(strings) {
+    const str = strings.join("\x1C");
+    let hash = 0;
+
+    for (let i = 0; i < str.length; i++) {
+      hash = (hash << 5) - hash + str.charCodeAt(i);
+      hash |= 0;
+    }
+
+    // Convert the possibly negative integer hash code into an 8 character hex string, which isn't
+    // strictly necessary but increases user understanding that the id is a SHA-like hash
+    var hex = (0x100000000 + hash).toString(16);
+    if (hex.length < 8) {
+      hex = "0000000" + hex;
+    }
+    return hex.slice(-8);
+  }
+
+  function getUrlWithParams(params) {
+    const query = new URLSearchParams(location.search);
+    for (let key in params) {
+      query.set(key, params[key]);
+    }
+    return (
+      location.href.split(location.search || "?")[0] + "?" + query.toString()
+    );
+  }
+
   class Mutex {
     prom = Promise.resolve();
 
@@ -53,36 +88,62 @@
     roots = [];
 
     /** @type {Job[]} */
-    pendingJobs = [];
+    jobs = [];
 
     /** @type {Suite | null} */
     current = null;
 
-    /** @type {Job | null} */
-    onlyJob = null;
-
     /** @type {'ready' | 'running' | 'done'} */
     status = "ready";
+
+    // miscellaneous filtering rules
+    testHash = null;
+    suiteHash = null;
+    hasFilter = false;
+
+    addFilter(filter = {}) {
+      if (filter.testHash) {
+        this.hasFilter = true;
+        this.testHash = filter.testHash;
+      }
+      if (filter.suiteHash) {
+        this.hasFilter = true;
+        this.suiteHash = filter.suiteHash;
+      }
+    }
 
     /**
      * @param {string} description
      * @param {(assert: Assert) => void | Promise<void>} testFn
-     * @returns {Test}
      */
-    addTest(description, testFn) {
+    addTest(description, testFn, only = false) {
       const test = new Test(this.current, description, testFn);
+      if (this.testHash && test.hash !== this.testHash) {
+        return;
+      }
       this.addJob(test);
-      return test;
+      if (only) {
+        this.addFilter({ testHash: test.hash });
+        this.jobs = [test];
+      }
+      bus.trigger("test-added", this);
     }
 
     /**
      * @param {string} description
      * @param {() => any} suiteFn
-     * @returns {Suite}
      */
-    addSuite(description, suiteFn) {
+    addSuite(description, suiteFn, only = false) {
       const suite = new Suite(this.current, description);
+      if (this.suiteHash && suite.hash !== this.suiteHash) {
+        return;
+      }
       this.addJob(suite);
+      if (only) {
+        this.addFilter({ suiteHash: suite.hash });
+        this.jobs = [suite];
+      }
+      bus.trigger("suite-added", this);
       this.mutex.add(async () => {
         const current = this.current;
         this.current = suite;
@@ -94,7 +155,6 @@
           this.current = current;
         }
       });
-      return suite;
     }
 
     /**
@@ -105,7 +165,7 @@
         this.current.addJob(job);
       } else {
         this.roots.push(job);
-        this.pendingJobs.push(job);
+        this.jobs.push(job);
       }
     }
 
@@ -116,16 +176,12 @@
       }
       this.status = "running";
       bus.trigger("before-all");
-      if (this.onlyJob) {
-        await this.onlyJob.run();
-      } else {
-        while (this.pendingJobs.length) {
-          if (this.status !== "running") {
-            break;
-          }
-          const job = this.pendingJobs.shift();
-          await job.run();
+      while (this.jobs.length) {
+        if (this.status !== "running") {
+          break;
         }
+        const job = this.jobs.shift();
+        await job.run();
       }
       bus.trigger("after-all");
       this.status = "done";
@@ -172,7 +228,7 @@
     constructor(parent, description) {
       super(parent, description);
       this.path = parent ? parent.path.concat(description) : [description];
-      bus.trigger("suite-added", this);
+      this.hash = generateHash(this.path);
       bus.addEventListener("abort", () => (this.status = "abort"));
     }
 
@@ -216,7 +272,8 @@
     constructor(parent, description, runTest) {
       super(parent, description);
       this.runTest = runTest;
-      bus.trigger("test-added", this);
+      const parts = (parent ? parent.path : []).concat(description);
+      this.hash = generateHash(parts);
     }
 
     async run() {
@@ -302,7 +359,7 @@
   const requestAnimationFrame = window.requestAnimationFrame;
 
   class ReportingUI {
-    static html = `
+    static html = /** html */ `
       <div class="gtest-runner">
         <div class="gtest-panel">
           <div class="gtest-panel-top">
@@ -323,7 +380,7 @@
         <div class="gtest-reporting"></div>
       </div>`;
 
-    static style = `
+    static style = /** css */ `
       body {
         margin: 0;
       }
@@ -464,6 +521,16 @@
         cursor: default;
       }
 
+      .gtest-result-header a {
+        padding: 4px;
+          color: #C2CCD1;
+          text-decoration: none;
+      }
+
+      .gtest-result-header a:hover {
+        color: black;
+      }
+
       .gtest-result-detail {
         padding-left: 40px;
       }
@@ -590,11 +657,14 @@
         this.abortBtn.setAttribute("disabled", "disabled");
         const statusCls =
           this.failedTestNumber === 0 ? "gtest-darkgreen" : "gtest-darkred";
-        const msg = `${this.doneTestNumber} tests completed in ${this.suiteNumber} suites`;
+        const msg = `${this.doneTestNumber} test(s) completed`;
+        const hasFilter = this.runner.hasFilter;
+        const suiteInfo = hasFilter ? "" : ` in ${this.suiteNumber} suites`;
+
         const errors = this.failedTestNumber
           ? `, with ${this.failedTestNumber} failed`
           : "";
-        const status = `<span class="gtest-circle ${statusCls}"></span> ${msg}${errors}`;
+        const status = `<span class="gtest-circle ${statusCls}"></span> ${msg}${suiteInfo}${errors}`;
         this.setStatusContent(status);
         if (this.failedTestNumber > 0) {
           document.title = `✖ ${document.title}`;
@@ -615,7 +685,7 @@
       const params = new URLSearchParams(location.search);
       if (this.hidePassed) {
         this.reporting.classList.add("gtest-hidepassed");
-        params.set("hidepassed", 1);
+        params.set("hidepassed", "1");
       } else {
         this.reporting.classList.remove("gtest-hidepassed");
         params.delete("hidepassed");
@@ -638,7 +708,10 @@
 
     updateIdleStatus() {
       if (this.runner.status === "ready") {
-        const status = `${this.suiteNumber} suites, with ${this.testNumber} tests`;
+        let status = `Ready.`;
+        if (!this.runner.hasFilter) {
+          status = `${status} ${this.testNumber} test(s), ${this.suiteNumber} suites`;
+        }
         this.setStatusContent(status);
         requestAnimationFrame(() => this.updateIdleStatus());
       }
@@ -663,8 +736,11 @@
         suite ? fullPath : ""
       }</span>`;
       const testHtml = `<span class="gtest-name" data-index="${index}">${test.description} (${test.assertions.length})</span>`;
+
+      const url = getUrlWithParams({ testId: test.hash });
+      const rerunLink = `<a href="${url}">Rerun</a>`;
       const durationHtml = `<span class="gtest-duration">${test.duration} ms</span>`;
-      header.innerHTML = suitesHtml + testHtml + durationHtml;
+      header.innerHTML = suitesHtml + testHtml + rerunLink + durationHtml;
       header.prepend(result);
 
       // test result div
@@ -774,7 +850,7 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Miscellaneous
+  // Fixture system
   // ---------------------------------------------------------------------------
 
   function getFixture() {
@@ -784,6 +860,10 @@
     registerCleanup(() => div.remove());
     return div;
   }
+
+  // ---------------------------------------------------------------------------
+  // Cleanup system
+  // ---------------------------------------------------------------------------
 
   const cleanupFns = [];
 
@@ -797,12 +877,23 @@
       fn();
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // Setup
+  // ---------------------------------------------------------------------------
+
+  const runner = new TestRunner();
+  const queryParams = new URLSearchParams(location.search);
+  const testId = queryParams.get("testId");
+  if (testId) {
+    runner.addFilter({ testHash: testId });
+  }
+  const ui = new ReportingUI(runner);
+  ui.mount();
+
   // ---------------------------------------------------------------------------
   // Exported values
   // ---------------------------------------------------------------------------
-  const runner = new TestRunner();
-  const ui = new ReportingUI(runner);
-  ui.mount();
 
   /**
    * @param {any} description
@@ -823,8 +914,7 @@
       let nestedArgs = Array.from(arguments).slice(1);
       suite(description, () => suite.only(...nestedArgs));
     } else {
-      const job = runner.addSuite(description, cb);
-      runner.onlyJob = job;
+      runner.addSuite(description, cb, true);
     }
   };
 
@@ -837,8 +927,7 @@
   }
 
   test.only = function restrict(description, runTest) {
-    const job = runner.addTest(description, runTest);
-    runner.onlyJob = job;
+    runner.addTest(description, runTest, true);
   };
 
   async function start() {
