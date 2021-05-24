@@ -94,16 +94,12 @@
 
     // miscellaneous filtering rules
     hasFilter = false;
-    testHash = null;
-    suiteHash = null;
+    hashSet = new Set();
 
     addFilter(filter = {}) {
       this.hasFilter = true;
-      if (filter.testHash) {
-        this.testHash = filter.testHash;
-      }
-      if (filter.suiteHash) {
-        this.suiteHash = filter.suiteHash;
+      if (filter.hash) {
+        this.hashSet.add(filter.hash);
       }
     }
 
@@ -115,7 +111,7 @@
       const test = new Test(this.current, description, testFn);
       this.addJob(test);
       if (only) {
-        this.addFilter({ testHash: test.hash });
+        this.addFilter({ hash: test.hash });
       }
       bus.trigger("test-added", this);
     }
@@ -127,7 +123,7 @@
     addSuite(description, suiteFn, only = false) {
       const suite = new Suite(this.current, description);
       if (only) {
-        this.addFilter({ suiteHash: suite.hash });
+        this.addFilter({ hash: suite.hash });
       }
       this.addJob(suite);
       bus.trigger("suite-added", this);
@@ -157,45 +153,25 @@
     }
 
     trimJobTree() {
-      const hash = this.testHash || this.suiteHash;
-      if (hash) {
-        let jobs = findJobs(hash, this.jobs);
-        this.jobs = [];
-        for (let job of jobs) {
-          let root = job.parent;
-          if (!root) {
-            this.jobs.push(job);
-          } else {
-            root.jobs = [job];
-            while (root.parent) {
-              job = root;
-              root = root.parent;
-              root.jobs = [job];
-            }
-            this.jobs.push(root);
+      const hashSet = this.hashSet;
+      this.jobs = getJobs(this.jobs);
+
+      function shouldBeRun(job) {
+        if (hashSet.has(job.hash)) {
+          return true;
+        }
+        if (job instanceof Suite) {
+          let subJobs = getJobs(job.jobs);
+          if (subJobs.length) {
+            job.jobs = subJobs;
+            return true;
           }
         }
+        return false;
       }
 
-      function findJobs(hash, jobs) {
-        const result = [];
-        for (let job of jobs) {
-          if (job.hash === hash) {
-            result.push(job);
-          }
-        }
-        if (result.length) {
-          return result;
-        }
-        for (let job of jobs) {
-          if (job instanceof Suite) {
-            let search = findJobs(hash, job.jobs);
-            if (search.length) {
-              return search;
-            }
-          }
-        }
-        return result;
+      function getJobs(jobs) {
+        return jobs.filter(shouldBeRun);
       }
     }
 
@@ -405,7 +381,8 @@
           </div>
           <div class="gtest-panel-main">
             <button class="gtest-btn gtest-abort">Start</button>
-            <button class="gtest-btn gtest-rerun"><a href="">Rerun all</a></button>
+            <button class="gtest-btn gtest-run-failed" disabled="disabled"><a href="">Run failed</a></button>
+            <button class="gtest-btn gtest-run-all"><a href="">Run all</a></button>
             <div class="gtest-hidepassed">
               <input type="checkbox" id="gtest-hidepassed">
               <label for="gtest-hidepassed">Hide passed tests</label>
@@ -477,11 +454,11 @@
         opacity: 0.4;
       }
       
-      .gtest-rerun {
+      .gtest-run-all, .gtest-run-failed {
         padding: 0;
       }
 
-      .gtest-rerun a {
+      .gtest-run-all a, .gtest-run-failed a {
         padding: 0px 12px;
         line-height: 30px;
         display: inline-block;
@@ -638,6 +615,7 @@
     doneTestNumber = 0;
     tests = {};
     testIndex = 1;
+    failedTests = [];
 
     /**
      * @param {TestRunner} runner
@@ -651,6 +629,7 @@
         this.doneTestNumber++;
         if (!test.pass) {
           this.failedTestNumber++;
+          this.failedTests.push(test.hash);
         }
       });
 
@@ -670,9 +649,10 @@
       document.head.appendChild(sheet);
 
       // key dom elements
-      this.statusPanel = document.getElementsByClassName("gtest-status")[0];
-      this.abortBtn = document.getElementsByClassName("gtest-abort")[0];
-      this.reporting = document.getElementsByClassName("gtest-reporting")[0];
+      this.statusPanel = document.querySelector(".gtest-status");
+      this.abortBtn = document.querySelector(".gtest-abort");
+      this.runFailedBtn = document.querySelector(".gtest-run-failed");
+      this.reporting = document.querySelector(".gtest-reporting");
       this.hidePassedCheckbox = document.querySelector(
         ".gtest-panel .gtest-hidepassed input"
       );
@@ -682,26 +662,31 @@
         this.reporting.classList.add("gtest-hidepassed");
       }
 
-      const rerunLink = document.querySelector(".gtest-rerun a");
+      const runLink = document.querySelector(".gtest-run-all a");
+      const runFailedLink = document.querySelector(".gtest-run-failed a");
       const search = location.search;
       const params = new URLSearchParams(search);
       params.delete("testId");
       params.delete("suiteId");
       const query = params.toString();
       const href = `${location.pathname}${query}${location.hash}`;
-      rerunLink.setAttribute("href", href);
-      rerunLink.addEventListener("click", () => {
-        if (location.search === search) {
-          location.reload();
-        }
+      runLink.setAttribute("href", href);
+      runFailedLink.setAttribute("href", location.href);
+      runFailedLink.addEventListener("click", () => {
+        sessionStorage.setItem(
+          "gtest-failed-tests",
+          this.failedTests.toString()
+        );
       });
-      this.reporting.addEventListener("click", (ev) => {
-        if (ev.target.matches(".gtest-result-header a")) {
-          if (location.search === search) {
-            location.reload();
+      document
+        .querySelector(".gtest-runner")
+        .addEventListener("click", (ev) => {
+          if (ev.target.matches("a")) {
+            if (location.search === search) {
+              location.reload();
+            }
           }
-        }
-      });
+        });
 
       // ui event handlers
 
@@ -730,6 +715,9 @@
 
       bus.addEventListener("after-all", () => {
         this.abortBtn.setAttribute("disabled", "disabled");
+        if (this.failedTests.length) {
+          this.runFailedBtn.removeAttribute("disabled");
+        }
         const statusCls =
           this.failedTestNumber === 0 ? "gtest-darkgreen" : "gtest-darkred";
         const msg = `${this.doneTestNumber} test(s) completed`;
@@ -795,21 +783,22 @@
       result.classList.add(test.pass ? "gtest-darkgreen" : "gtest-darkred");
       let params = new URLSearchParams(location.search);
 
-      const suiteLinks = suite.suitePath.map((s) => {
-        params.set("suiteId", s.hash);
-        params.delete("testId");
-        return `<a href="${getUrlWithParams(params)}">${s.description}</a>`;
-      });
-      const fullPath = suite ? suiteLinks.join(" > ") + " >" : "";
-      const suitesHtml = `<span class="gtest-cell">${index}. ${
-        suite ? fullPath : ""
-      }</span>`;
+      let suitesHtml = "";
+      if (suite) {
+        const suiteLinks = suite.suitePath.map((s) => {
+          params.set("suiteId", s.hash);
+          params.delete("testId");
+          return `<a href="${getUrlWithParams(params)}">${s.description}</a>`;
+        });
+        const fullPath = suiteLinks.join(" > ") + " >";
+        suitesHtml = `<span class="gtest-cell">${index}. ${fullPath}</span>`;
+      }
 
       params = new URLSearchParams(location.search);
       params.set("testId", test.hash);
       const url = getUrlWithParams(params);
       const testHtml = `<a class="gtest-name" href="${url}">${test.description} (${test.assertions.length})</a>`;
-      const openBtn = `<span class="gtest-open" data-index="${index}">Open</span>`;
+      const openBtn = `<span class="gtest-open" data-index="${index}"> open </span>`;
       const durationHtml = `<span class="gtest-duration">${test.duration} ms</span>`;
       header.innerHTML = suitesHtml + testHtml + openBtn + durationHtml;
       header.prepend(result);
@@ -956,12 +945,18 @@
   const runner = new TestRunner();
   const queryParams = new URLSearchParams(location.search);
   const testId = queryParams.get("testId");
-  if (testId) {
-    runner.addFilter({ testHash: testId });
-  }
   const suiteId = queryParams.get("suiteId");
-  if (suiteId) {
-    runner.addFilter({ suiteHash: suiteId });
+  const failedTests = sessionStorage.getItem("gtest-failed-tests");
+  if (failedTests) {
+    sessionStorage.removeItem("gtest-failed-tests");
+    const tests = failedTests.split(",");
+    for (let fail of tests) {
+      runner.addFilter({ hash: fail });
+    }
+  } else if (testId) {
+    runner.addFilter({ hash: testId });
+  } else if (suiteId) {
+    runner.addFilter({ hash: suiteId });
   }
   const ui = new ReportingUI(runner);
   ui.mount();
