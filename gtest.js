@@ -66,8 +66,13 @@
     }
   }
 
-  // internal bus
+  // capture location in case some testing code decides to mock it
+  const location = window.location;
+
   const bus = new Bus();
+  const queryParams = new URLSearchParams(location.search);
+  let notrycatch = queryParams.has("notrycatch");
+  let hidePassed = queryParams.has("hidepassed");
 
   // ---------------------------------------------------------------------------
   // TestRunner
@@ -294,27 +299,31 @@
       const assert = new Assert();
       bus.trigger("before-test", this);
       let start = Date.now();
-      let isComplete = false;
-      let timeOut = new Promise((resolve, reject) => {
-        setTimeout(() => {
-          if (isComplete) {
-            resolve();
-          } else {
-            reject(
-              new TimeoutError(
-                `test took longer than ${TestRunner.config.timeout}ms`
-              )
-            );
-          }
-        }, TestRunner.config.timeout);
-      });
-      try {
-        await Promise.race([timeOut, this.runTest(assert)]);
-        this.pass = assert.result;
-      } catch (e) {
-        this.error = e;
+      if (notrycatch) {
+        await this.runTest(assert);
+      } else {
+        let isComplete = false;
+        let timeOut = new Promise((resolve, reject) => {
+          setTimeout(() => {
+            if (isComplete) {
+              resolve();
+            } else {
+              reject(
+                new TimeoutError(
+                  `test took longer than ${TestRunner.config.timeout}ms`
+                )
+              );
+            }
+          }, TestRunner.config.timeout);
+        });
+        try {
+          await Promise.race([timeOut, this.runTest(assert)]);
+        } catch (e) {
+          this.error = e;
+        }
+        isComplete = true;
       }
-      isComplete = true;
+      this.pass = assert.result;
       this.assertions = assert.assertions;
       this.duration = Date.now() - start;
       bus.trigger("after-test", this);
@@ -369,9 +378,6 @@
   // Reporting
   // ---------------------------------------------------------------------------
 
-  // capture location in case some testing code decides to mock it
-  const location = window.location;
-
   class ReportingUI {
     static html = /** html */ `
       <div class="gtest-runner">
@@ -383,9 +389,13 @@
             <button class="gtest-btn gtest-abort">Start</button>
             <button class="gtest-btn gtest-run-failed" disabled="disabled"><a href="">Run failed</a></button>
             <button class="gtest-btn gtest-run-all"><a href="">Run all</a></button>
-            <div class="gtest-hidepassed">
+            <div class="gtest-checkbox">
               <input type="checkbox" id="gtest-hidepassed">
               <label for="gtest-hidepassed">Hide passed tests</label>
+            </div>
+            <div class="gtest-checkbox">
+              <input type="checkbox" id="gtest-notrycatch">
+              <label for="gtest-notrycatch">No try/catch</label>
             </div>
           </div>
           <div class="gtest-status">Ready
@@ -472,8 +482,9 @@
         padding-left: 8px;
       }
 
-      .gtest-hidepassed {
+      .gtest-checkbox {
         display: inline-block;
+        font-size: 15px;
       }
 
       .gtest-status {
@@ -632,9 +643,6 @@
           this.failedTests.push(test.hash);
         }
       });
-
-      const searchparams = new URLSearchParams(location.search);
-      this.hidePassed = searchparams.has("hidepassed");
     }
 
     async mount() {
@@ -653,13 +661,15 @@
       this.abortBtn = document.querySelector(".gtest-abort");
       this.runFailedBtn = document.querySelector(".gtest-run-failed");
       this.reporting = document.querySelector(".gtest-reporting");
-      this.hidePassedCheckbox = document.querySelector(
-        ".gtest-panel .gtest-hidepassed input"
-      );
+      this.hidePassedCheckbox = document.getElementById("gtest-hidepassed");
+      this.notrycatchCheckbox = document.getElementById("gtest-notrycatch");
 
-      if (this.hidePassed) {
+      if (hidePassed) {
         this.hidePassedCheckbox.checked = true;
         this.reporting.classList.add("gtest-hidepassed");
+      }
+      if (notrycatch) {
+        this.notrycatchCheckbox.checked = true;
       }
 
       const runLink = document.querySelector(".gtest-run-all a");
@@ -741,15 +751,18 @@
       this.hidePassedCheckbox.addEventListener("change", () => {
         this.toggleHidePassedTests();
       });
+      this.notrycatchCheckbox.addEventListener("change", () => {
+        this.toggleNoTryCatch();
+      });
       if (TestRunner.config.autostart) {
         runner.start();
       }
     }
 
     toggleHidePassedTests() {
-      this.hidePassed = !this.hidePassed;
+      hidePassed = !hidePassed;
       const params = new URLSearchParams(location.search);
-      if (this.hidePassed) {
+      if (hidePassed) {
         this.reporting.classList.add("gtest-hidepassed");
         params.set("hidepassed", "1");
       } else {
@@ -759,6 +772,19 @@
       const newurl = getUrlWithParams(params);
       history.replaceState({ path: newurl }, "", newurl);
     }
+
+    toggleNoTryCatch() {
+      const params = new URLSearchParams(location.search);
+      if (!notrycatch) {
+        params.set("notrycatch", "1");
+      } else {
+        params.delete("notrycatch");
+      }
+      const newurl = getUrlWithParams(params);
+      history.replaceState({ path: newurl }, "", newurl);
+      location.reload();
+    }
+
     /**
      * @param {string} content
      */
@@ -943,7 +969,6 @@
   // ---------------------------------------------------------------------------
 
   const runner = new TestRunner();
-  const queryParams = new URLSearchParams(location.search);
   const testId = queryParams.get("testId");
   const suiteId = queryParams.get("suiteId");
   const failedTests = sessionStorage.getItem("gtest-failed-tests");
