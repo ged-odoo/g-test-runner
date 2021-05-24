@@ -37,7 +37,8 @@
   }
 
   function getUrlWithParams(params) {
-    return `${location.pathname}${params.toString()}${location.hash}`;
+    const query = params.toString();
+    return `${location.pathname}${query ? "?" + query : ""}${location.hash}`;
   }
 
   class Mutex {
@@ -91,9 +92,9 @@
     status = "ready";
 
     // miscellaneous filtering rules
+    hasFilter = false;
     testHash = null;
     suiteHash = null;
-    hasFilter = false;
 
     addFilter(filter = {}) {
       this.hasFilter = true;
@@ -111,13 +112,9 @@
      */
     addTest(description, testFn, only = false) {
       const test = new Test(this.current, description, testFn);
-      if (this.testHash && test.hash !== this.testHash) {
-        return;
-      }
       this.addJob(test);
       if (only) {
         this.addFilter({ testHash: test.hash });
-        this.jobs = [test];
       }
       bus.trigger("test-added", this);
     }
@@ -128,14 +125,10 @@
      */
     addSuite(description, suiteFn, only = false) {
       const suite = new Suite(this.current, description);
-      if (this.suiteHash && suite.hash !== this.suiteHash) {
-        return;
-      }
-      this.addJob(suite);
       if (only) {
         this.addFilter({ suiteHash: suite.hash });
-        this.jobs = [suite];
       }
+      this.addJob(suite);
       bus.trigger("suite-added", this);
       this.mutex.add(async () => {
         const current = this.current;
@@ -162,11 +155,52 @@
       }
     }
 
+    trimJobTree() {
+      const hash = this.testHash || this.suiteHash;
+      if (hash) {
+        let job = findJob(hash, this.jobs);
+        if (job) {
+          let root = job.parent;
+          if (!root) {
+            this.jobs = [job];
+          } else {
+            root.jobs = [job];
+            while (root.parent) {
+              job = root;
+              root = root.parent;
+              root.jobs = [job];
+            }
+            this.jobs = [root];
+          }
+        }
+      }
+
+      function findJob(hash, jobs) {
+        for (let job of jobs) {
+          if (job.hash === hash) {
+            return job;
+          }
+          if (job instanceof Suite) {
+            let search = findJob(hash, job.jobs);
+            if (search) {
+              return search;
+            }
+          }
+        }
+        return null;
+      }
+    }
+
     async start() {
       await domReady; // may need dom for some tests
       if (this.status !== "ready") {
         return;
       }
+
+      if (this.hasFilter) {
+        this.trimJobTree();
+      }
+
       this.status = "running";
       bus.trigger("before-all");
       while (this.jobs.length) {
@@ -213,6 +247,8 @@
     /** @type {Job[]} */
     jobs = [];
     status = "ready";
+    path = [];
+    suitePath = [];
 
     /**
      * @param {Suite | null} parent
@@ -221,6 +257,7 @@
     constructor(parent, description) {
       super(parent, description);
       this.path = parent ? parent.path.concat(description) : [description];
+      this.suitePath = parent ? parent.suitePath.concat(this) : [this];
       this.hash = generateHash(this.path);
       bus.addEventListener("abort", () => (this.status = "abort"));
     }
@@ -570,9 +607,12 @@
         cursor: pointer;
       }
       .gtest-cell {
-          padding: 5px;
-          font-weight: bold;
-          color: #444444;
+        padding: 5px;
+        font-weight: bold;
+      }
+
+      .gtest-cell a {
+        color: #444444;
       }
       .gtest-duration {
         float: right;
@@ -633,11 +673,27 @@
       }
 
       const rerunLink = document.querySelector(".gtest-rerun a");
-      const params = new URLSearchParams(location.search);
+      const search = location.search;
+      const params = new URLSearchParams(search);
       params.delete("testId");
       params.delete("suiteId");
-      const href = `${location.pathname}${params.toString()}${location.hash}`;
+      const query = params.toString();
+      const href = `${location.pathname}${query}${location.hash}`;
       rerunLink.setAttribute("href", href);
+      rerunLink.addEventListener("click", () => {
+        sessionStorage.setItem("gtest-autostart", "true");
+        if (location.search === search) {
+          location.reload();
+        }
+      });
+      this.reporting.addEventListener("click", (ev) => {
+        if (ev.target.matches(".gtest-result-header a")) {
+          sessionStorage.setItem("gtest-autostart", "true");
+          if (location.search === search) {
+            location.reload();
+          }
+        }
+      });
 
       // ui event handlers
       this.startBtn.addEventListener("click", () => {
@@ -740,13 +796,20 @@
       const result = document.createElement("span");
       result.classList.add("gtest-circle");
       result.classList.add(test.pass ? "gtest-darkgreen" : "gtest-darkred");
-      const fullPath = suite ? suite.path.join(" > ") + " >" : "";
+      let params = new URLSearchParams(location.search);
+
+      const suiteLinks = suite.suitePath.map((s) => {
+        params.set("suiteId", s.hash);
+        params.delete("testId");
+        return `<a href="${getUrlWithParams(params)}">${s.description}</a>`;
+      });
+      const fullPath = suite ? suiteLinks.join(" > ") + " >" : "";
       const suitesHtml = `<span class="gtest-cell">${index}. ${
         suite ? fullPath : ""
       }</span>`;
       const testHtml = `<span class="gtest-name" data-index="${index}">${test.description} (${test.assertions.length})</span>`;
 
-      const params = new URLSearchParams(location.search);
+      params = new URLSearchParams(location.search);
       params.set("testId", test.hash);
       const url = getUrlWithParams(params);
       const rerunLink = `<a href="${url}">Rerun</a>`;
@@ -899,8 +962,16 @@
   if (testId) {
     runner.addFilter({ testHash: testId });
   }
+  const suiteId = queryParams.get("suiteId");
+  if (suiteId) {
+    runner.addFilter({ suiteHash: suiteId });
+  }
   const ui = new ReportingUI(runner);
   ui.mount();
+  if (sessionStorage.getItem("gtest-autostart")) {
+    sessionStorage.removeItem("gtest-autostart");
+    runner.start();
+  }
 
   // ---------------------------------------------------------------------------
   // Exported values
