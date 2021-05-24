@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang=en>
+<head>
+<meta charset=utf-8>
+<title>gTest</title>
+</head>
+<body>
+<script src="../gtest.js"></script>
+<script>
+(function () {
+
+const {suite, test} = gTest;
+
+gTest.config.autostart = false;
+
+/**
+ * Simple generic test suite
+ */
+
+suite('math', () => {
+
+    test('simple addition', (assert) => {
+        assert.equal(1 + 1, 2, "1 + 1 should be equal to 2");
+        assert.equal(1 + 2, 4);
+    });
+
+    test('addition with negative number', (assert) => {
+        assert.equal(3 + (-1), 2);
+        assert.ok(true, "this work!")
+    });
+});
+
+
+suite('utils', () => {
+
+    test('first test', assert => {
+        assert.equal(1 + 1, 2);
+    });
+
+    test('snd test', assert => {
+        assert.equal(3 + (-1), 2);
+    });
+
+    suite('sub suite', () => {
+
+        test('something is happening', assert => {
+            assert.ok(0, 'hey');
+        });
+
+        test('blabla', assert => {
+            assert.ok(1, 'hey');
+        });
+    })
+});
+
+})();
+
+</script>
+</body>
+</html>

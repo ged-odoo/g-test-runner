@@ -76,6 +76,7 @@
   class TestRunner {
     static config = {
       timeout: 10000,
+      autostart: true,
     };
 
     mutex = new Mutex();
@@ -158,11 +159,12 @@
     trimJobTree() {
       const hash = this.testHash || this.suiteHash;
       if (hash) {
-        let job = findJob(hash, this.jobs);
-        if (job) {
+        let jobs = findJobs(hash, this.jobs);
+        this.jobs = [];
+        for (let job of jobs) {
           let root = job.parent;
           if (!root) {
-            this.jobs = [job];
+            this.jobs.push(job);
           } else {
             root.jobs = [job];
             while (root.parent) {
@@ -170,24 +172,30 @@
               root = root.parent;
               root.jobs = [job];
             }
-            this.jobs = [root];
+            this.jobs.push(root);
           }
         }
       }
 
-      function findJob(hash, jobs) {
+      function findJobs(hash, jobs) {
+        const result = [];
         for (let job of jobs) {
           if (job.hash === hash) {
-            return job;
+            result.push(job);
           }
+        }
+        if (result.length) {
+          return result;
+        }
+        for (let job of jobs) {
           if (job instanceof Suite) {
-            let search = findJob(hash, job.jobs);
+            let search = findJobs(hash, job.jobs);
             if (search) {
               return search;
             }
           }
         }
-        return null;
+        return result;
       }
     }
 
@@ -385,8 +393,8 @@
   // Reporting
   // ---------------------------------------------------------------------------
 
-  // capture RAF in case some testing code decides to modify it
-  const requestAnimationFrame = window.requestAnimationFrame;
+  // capture location in case some testing code decides to mock it
+  const location = window.location;
 
   class ReportingUI {
     static html = /** html */ `
@@ -396,7 +404,6 @@
             <span class="gtest-logo">gTest</span>
           </div>
           <div class="gtest-panel-main">
-            <button class="gtest-btn gtest-start">Start</button>
             <button class="gtest-btn gtest-abort" disabled="disabled">Abort</button>
             <button class="gtest-btn gtest-rerun"><a href="">Rerun all</a></button>
             <div class="gtest-hidepassed">
@@ -404,7 +411,7 @@
               <label for="gtest-hidepassed">Hide passed tests</label>
             </div>
           </div>
-          <div class="gtest-status">
+          <div class="gtest-status">Ready
           </div>
         </div>
         <div class="gtest-reporting"></div>
@@ -624,7 +631,6 @@
     testNumber = 0;
     failedTestNumber = 0;
     doneTestNumber = 0;
-    statusMsg = "";
     tests = {};
     testIndex = 1;
 
@@ -660,7 +666,6 @@
 
       // key dom elements
       this.statusPanel = document.getElementsByClassName("gtest-status")[0];
-      this.startBtn = document.getElementsByClassName("gtest-start")[0];
       this.abortBtn = document.getElementsByClassName("gtest-abort")[0];
       this.reporting = document.getElementsByClassName("gtest-reporting")[0];
       this.hidePassedCheckbox = document.querySelector(
@@ -681,14 +686,12 @@
       const href = `${location.pathname}${query}${location.hash}`;
       rerunLink.setAttribute("href", href);
       rerunLink.addEventListener("click", () => {
-        sessionStorage.setItem("gtest-autostart", "true");
         if (location.search === search) {
           location.reload();
         }
       });
       this.reporting.addEventListener("click", (ev) => {
         if (ev.target.matches(".gtest-result-header a")) {
-          sessionStorage.setItem("gtest-autostart", "true");
           if (location.search === search) {
             location.reload();
           }
@@ -696,9 +699,6 @@
       });
 
       // ui event handlers
-      this.startBtn.addEventListener("click", () => {
-        this.runner.start();
-      });
 
       this.abortBtn.addEventListener("click", () => {
         this.runner.stop();
@@ -706,7 +706,6 @@
 
       // business event handlers
       bus.addEventListener("before-all", () => {
-        this.startBtn.setAttribute("disabled", "disabled");
         this.abortBtn.removeAttribute("disabled");
       });
 
@@ -716,7 +715,6 @@
         this.setStatusContent(`Running: ${fullPath}: ${description}`);
       });
 
-      this.updateIdleStatus();
       bus.addEventListener("after-test", (ev) => {
         this.addTestResult(ev.detail);
       });
@@ -746,6 +744,9 @@
       this.hidePassedCheckbox.addEventListener("change", () => {
         this.toggleHidePassedTests();
       });
+      if (TestRunner.config.autostart) {
+        runner.start();
+      }
     }
 
     toggleHidePassedTests() {
@@ -765,21 +766,8 @@
      * @param {string} content
      */
     setStatusContent(content) {
-      if (content !== this.statusMsg) {
-        this.statusPanel.innerHTML = content;
-        this.statusMsg = content;
-      }
-    }
-
-    updateIdleStatus() {
-      if (this.runner.status === "ready") {
-        let status = `Ready.`;
-        if (!this.runner.hasFilter) {
-          status = `${status} ${this.testNumber} test(s), ${this.suiteNumber} suites`;
-        }
-        this.setStatusContent(status);
-        requestAnimationFrame(() => this.updateIdleStatus());
-      }
+      this.statusPanel.innerHTML = content;
+      this.statusMsg = content;
     }
 
     /**
@@ -968,10 +956,6 @@
   }
   const ui = new ReportingUI(runner);
   ui.mount();
-  if (sessionStorage.getItem("gtest-autostart")) {
-    sessionStorage.removeItem("gtest-autostart");
-    runner.start();
-  }
 
   // ---------------------------------------------------------------------------
   // Exported values
