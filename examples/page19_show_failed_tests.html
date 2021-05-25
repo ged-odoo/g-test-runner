@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang=en>
+<head>
+<meta charset=utf-8>
+<title>gTest</title>
+</head>
+<body>
+<script src="../gtest.js"></script>
+<script>
+(function () {
+
+const {suite, test} = gTest;
+
+gTest.config.showDetail = "failed";
+
+suite('the showDetail config key is set to failed', () => {
+
+    test('simple addition', (assert) => {
+        assert.equal(1 + 1, 2, "1 + 1 should be equal to 2");
+        assert.equal(1 + 2, 4);
+        assert.ok(false);
+    });
+
+    test('addition with negative number', (assert) => {
+        assert.equal(3 + (-1), 2);
+        assert.ok(true, "this work!")
+    });
+
+    test("other test", (assert) => {
+        assert.ok(false);
+    });
+
+    test("other test 2", (assert) => {
+        assert.ok(false);
+    });
+
+    test("other test 3", (assert) => {
+        assert.ok(false);
+    });
+});
+
+
+suite('utils', () => {
+
+    test('first test', assert => {
+        assert.equal(1 + 1, 2);
+    });
+
+    test('snd test', assert => {
+        assert.equal(3 + (-1), 2);
+    });
+
+});
+
+})();
+
+</script>
+</body>
+</html>

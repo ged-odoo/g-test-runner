@@ -82,6 +82,7 @@
     static config = {
       timeout: 10000,
       autostart: true,
+      showDetail: "first-fail",
     };
 
     mutex = new Mutex();
@@ -670,6 +671,7 @@
     tests = {};
     testIndex = 1;
     failedTests = [];
+    didShowDetail = false;
 
     /**
      * @param {TestRunner} runner
@@ -787,9 +789,13 @@
         }
       });
 
-      this.reporting.addEventListener("click", (ev) =>
-        this.addDetailedTestResult(ev)
-      );
+      this.reporting.addEventListener("click", (ev) => {
+        const index = ev.target?.dataset?.index;
+        if (index) {
+          const resultDiv = ev.target.closest(".gtest-result");
+          this.toggleDetailedTestResult(index, resultDiv)
+        }
+      });
 
       this.hidePassedCheckbox.addEventListener("change", () => {
         this.toggleHidePassedTests();
@@ -880,42 +886,44 @@
         div.classList.add("gtest-fail");
       }
       this.reporting.appendChild(div);
+
+      if (!test.pass) {
+        const showDetailConfig = TestRunner.config.showDetail;
+        const shouldShowDetail = showDetailConfig === "failed" || (showDetailConfig === "first-fail" && !this.didShowDetail);
+        if (shouldShowDetail) {
+          this.toggleDetailedTestResult(index, div);
+          this.didShowDetail = true;
+        }
+      }
     }
 
-    /**
-     * @param {Event} ev
-     */
-    addDetailedTestResult(ev) {
-      const index = ev.target?.dataset?.index;
-      if (index) {
-        const test = this.tests[index];
-        const resultDiv = ev.target.closest(".gtest-result");
-        const detailDiv = resultDiv.querySelector(".gtest-result-detail");
-        if (detailDiv) {
-          detailDiv.remove();
-        } else {
-          const results = document.createElement("div");
-          results.classList.add("gtest-result-detail");
-          const assertions = test.assertions;
-          for (let i = 0; i < assertions.length; i++) {
-            this.addAssertionInfo(results, i, assertions[i]);
-          }
-          if (test.error) {
-            const div = makeEl("div", [
-              "gtest-result-line",
-              "gtest-text-darkred",
-            ]);
-            div.innerText = `Died on test #${index}`;
-            results.appendChild(div);
-            this.addInfoTable(results, [
-              [
-                `<span class="gtest-text-darkred">Source:</span>`,
-                `<pre class="gtest-stack">${test.error.stack}</pre>`,
-              ],
-            ]);
-          }
-          resultDiv.appendChild(results);
+    toggleDetailedTestResult(testIndex, resultDiv) {
+      const test = this.tests[testIndex];
+      const detailDiv = resultDiv.querySelector(".gtest-result-detail");
+      if (detailDiv) {
+        detailDiv.remove();
+      } else {
+        const results = document.createElement("div");
+        results.classList.add("gtest-result-detail");
+        const assertions = test.assertions;
+        for (let i = 0; i < assertions.length; i++) {
+          this.addAssertionInfo(results, i, assertions[i]);
         }
+        if (test.error) {
+          const div = makeEl("div", [
+            "gtest-result-line",
+            "gtest-text-darkred",
+          ]);
+          div.innerText = `Died on test #${testIndex}`;
+          results.appendChild(div);
+          this.addInfoTable(results, [
+            [
+              `<span class="gtest-text-darkred">Source:</span>`,
+              `<pre class="gtest-stack">${test.error.stack}</pre>`,
+            ],
+          ]);
+        }
+        resultDiv.appendChild(results);
       }
     }
 
