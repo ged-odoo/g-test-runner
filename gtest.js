@@ -320,6 +320,7 @@
           await Promise.race([timeOut, this.runTest(assert)]);
         } catch (e) {
           this.error = e;
+          assert.result = false;
         }
         isComplete = true;
       }
@@ -335,6 +336,8 @@
     assertions = [];
 
     result = true;
+
+    steps = [];
 
     /**
      * @param {any} value
@@ -371,6 +374,46 @@
         stack,
       });
       this.result = this.result && isOK;
+    }
+
+    step(str) {
+      if (!(typeof str === "string")) {
+        this.assertions.push({
+          type: "step",
+          pass: false,
+          msg: "assert.step requires a string",
+          stack: new Error().stack,
+        });
+        this.result = false;
+      } else {
+        this.assertions.push({
+          type: "step",
+          pass: true,
+          msg: `step: "${str}"`,
+        });
+        this.steps.push(str);
+      }
+    }
+
+    verifySteps(steps, msg) {
+      let result = true;
+      for (let i = 0; i < steps.length; i++) {
+        result = result && steps[i] === this.steps[i];
+      }
+      const stack = result ? null : new Error().stack;
+
+      const formatList = (list) =>
+        "[" + list.map((elem) => `"${elem}"`).join(", ") + "]";
+      this.assertions.push({
+        type: "verifysteps",
+        pass: result,
+        value: formatList(this.steps),
+        expected: formatList(steps),
+        msg: msg || (result ? "steps are correct" : "steps are not correct"),
+        stack,
+      });
+      this.steps = [];
+      this.result = this.result && result;
     }
   }
 
@@ -895,6 +938,7 @@
         switch (assertion.type) {
           case "equal":
           case "ok":
+          case "verifysteps":
             this.addInfoTable(parentEl, [
               [
                 `<span class="gtest-text-green">Expected:</span>`,
@@ -904,6 +948,14 @@
                 `<span class="gtest-text-red">Result:</span>`,
                 `<span>${assertion.value}</span>`,
               ],
+              [
+                `<span class="gtest-text-darkred">Source:</span>`,
+                `<pre class="gtest-stack">${stack}</pre>`,
+              ],
+            ]);
+          break;
+          case "step":
+            this.addInfoTable(parentEl, [
               [
                 `<span class="gtest-text-darkred">Source:</span>`,
                 `<pre class="gtest-stack">${stack}</pre>`,

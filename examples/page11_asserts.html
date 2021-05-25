@@ -31,6 +31,25 @@ suite('assert demo', () => {
         assert.ok(false, "msg");
     });
 
+    test('assert.step (success)', (assert) => {
+        assert.step("abc");
+        assert.step("def");
+        assert.verifySteps(["abc", "def"]);
+        assert.step("again");
+        assert.verifySteps(["again"]);
+    });
+
+    test('assert.step (failure)', (assert) => {
+        assert.step("def");
+        assert.step("abc");
+        assert.verifySteps(["abc", "def"]);
+        assert.step("again");
+        assert.verifySteps(["again"]);
+    });
+
+    test('assert.step with a non string', (assert) => {
+        assert.step(123);
+    });
 });
 
 })();
