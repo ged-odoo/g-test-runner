@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang=en>
+<head>
+<meta charset=utf-8>
+<title>gTest</title>
+</head>
+<body>
+<script src="../gtest.js"></script>
+<script>
+(function () {
+
+const {suite, test, beforeSuite, afterSuite, beforeEach, afterTest} = gTest;
+
+/**
+ * Simple generic test suite
+ */
+
+suite('simple example', () => {
+
+    beforeSuite(() => {
+        console.log('before suite');
+    });
+
+    afterSuite(() => {
+        console.log('after suite');
+    });
+
+    beforeEach(() => {
+        console.log('before each');
+        afterTest(() => {
+            console.log('after test');
+        });
+    });
+
+    test('simple addition', (assert) => {
+        console.log('in test');
+        assert.equal(1 + 1, 2, "1 + 1 should be equal to 2");
+        assert.equal(1 + 2, 4);
+    });
+    
+    test('addition with negative number', (assert) => {
+        console.log('in test');
+        assert.equal(3 + (-1), 2);
+        assert.ok(true, "this work!")
+    });
+
+    suite('inner suite', () => {
+
+        beforeSuite(() => {
+            console.log('inner before suite');
+        });
+
+        afterSuite(() => {
+            console.log('inner after suite');
+        });
+
+        beforeEach(() => {
+            console.log('inner before each');
+            afterTest(() => {
+                console.log('inner after test');
+            });
+        });
+        
+        test('inner test 1', (assert) => {
+            console.log('in test');
+            assert.ok(true);
+        });
+        test('inner test 2', (assert) => {
+            console.log('in test');
+            assert.ok(true);
+        });
+
+    });
+});
+
+
+suite('a variation', () => {
+
+    beforeSuite(() => {
+        console.log('vbefore suite');
+
+        afterSuite(() => {
+            console.log('vafter suite');
+        });
+    });
+
+
+    beforeEach(() => {
+        console.log('vbefore each');
+        afterTest(() => {
+            console.log('vafter test');
+        });
+    });
+
+    test('simple addition', (assert) => {
+        console.log('in test');
+        assert.equal(1 + 1, 2, "1 + 1 should be equal to 2");
+        assert.equal(1 + 2, 4);
+    });
+
+    test('addition with negative number', (assert) => {
+        console.log('in test');
+        assert.equal(3 + (-1), 2);
+        assert.ok(true, "this work!")
+    });
+
+    suite('inner suite', () => {
+
+        beforeSuite(() => {
+            console.log('ivnner before suite');
+
+            afterSuite(() => {
+                console.log('vinner after suite');
+            });
+            beforeEach(() => {
+                console.log('vinner before each');
+                afterTest(() => {
+                    console.log('vinner after test');
+                });
+            });
+        });
+
+
+        
+        test('inner test 1', (assert) => {
+            console.log('in test');
+            assert.ok(true);
+        });
+        test('inner test 2', (assert) => {
+            console.log('in test');
+            assert.ok(true);
+        });
+
+    });
+});
+
+suite('utils', () => {
+
+    test('first test', assert => {
+        assert.equal(1 + 1, 2);
+    });
+
+    test('snd test', assert => {
+        assert.equal(3 + (-1), 2);
+    });
+
+    suite('sub suite', () => {
+
+        test('something is happening', assert => {
+            assert.ok(0, 'hey');
+        });
+
+        test('blabla', assert => {
+            assert.ok(1, 'hey');
+        });
+    })
+});
+
+})();
+
+</script>
+</body>
+</html>

@@ -48,11 +48,13 @@
      * @param { () => Promise<void>} cb
      */
     add(cb) {
-      this.prom = this.prom.then(() => {
+      const prom = this.prom.then(() => {
         return new Promise((resolve) => {
           cb().finally(resolve);
         });
       });
+      this.prom = prom;
+      return prom;
     }
   }
 
@@ -66,14 +68,6 @@
     }
   }
 
-  // capture location in case some testing code decides to mock it
-  const location = window.location;
-
-  const bus = new Bus();
-  const queryParams = new URLSearchParams(location.search);
-  let notrycatch = queryParams.has("notrycatch");
-  let hidePassed = queryParams.has("hidepassed");
-
   // ---------------------------------------------------------------------------
   // TestRunner
   // ---------------------------------------------------------------------------
@@ -83,7 +77,10 @@
       timeout: 10000,
       autostart: true,
       showDetail: "first-fail",
+      notrycatch: false,
     };
+
+    bus = new Bus();
 
     mutex = new Mutex();
     /** @type {Job[]} */
@@ -92,8 +89,12 @@
     /** @type {Job[]} */
     jobs = [];
 
-    /** @type {Suite | null} */
-    current = null;
+    suiteStack = [];
+
+    /** @type {Suite | undefined} */
+    get current() {
+      return this.suiteStack[this.suiteStack.length - 1];
+    }
 
     /** @type {'ready' | 'running' | 'done'} */
     status = "ready";
@@ -101,6 +102,15 @@
     // miscellaneous filtering rules
     hasFilter = false;
     hashSet = new Set();
+
+    constructor() {
+      this.bus.addEventListener("before-suite", (ev) => {
+        this.suiteStack.push(ev.detail);
+      });
+      this.bus.addEventListener("after-suite", () => {
+        this.suiteStack.pop();
+      });
+    }
 
     addFilter(filter = {}) {
       this.hasFilter = true;
@@ -114,12 +124,12 @@
      * @param {(assert: Assert) => void | Promise<void>} testFn
      */
     addTest(description, testFn, only = false) {
-      const test = new Test(this.current, description, testFn);
+      const test = new Test(this.bus, this.current, description, testFn);
       this.addJob(test);
       if (only) {
         this.addFilter({ hash: test.hash });
       }
-      bus.trigger("test-added", this);
+      this.bus.trigger("test-added", test);
     }
 
     /**
@@ -127,21 +137,20 @@
      * @param {() => any} suiteFn
      */
     addSuite(description, suiteFn, only = false) {
-      const suite = new Suite(this.current, description);
+      const suite = new Suite(this.bus, this.current, description);
       if (only) {
         this.addFilter({ hash: suite.hash });
       }
       this.addJob(suite);
-      bus.trigger("suite-added", this);
+      this.bus.trigger("suite-added", suite);
       this.mutex.add(async () => {
-        const current = this.current;
-        this.current = suite;
+        this.suiteStack.push(suite);
         try {
           await suiteFn();
         } catch (e) {
           throw e;
         } finally {
-          this.current = current;
+          this.suiteStack.pop();
         }
       });
     }
@@ -158,16 +167,18 @@
       }
     }
 
-    trimJobTree() {
+    prepareJobs() {
       const hashSet = this.hashSet;
-      this.jobs = getJobs(this.jobs);
+      const jobs = this.hasFilter ? getValidJobs(this.jobs) : this.jobs;
+      this.jobs = [];
+      return jobs;
 
       function shouldBeRun(job) {
         if (hashSet.has(job.hash)) {
           return true;
         }
         if (job instanceof Suite) {
-          let subJobs = getJobs(job.jobs);
+          let subJobs = getValidJobs(job.jobs);
           if (subJobs.length) {
             job.jobs = subJobs;
             return true;
@@ -176,37 +187,41 @@
         return false;
       }
 
-      function getJobs(jobs) {
+      function getValidJobs(jobs) {
         return jobs.filter(shouldBeRun);
       }
     }
 
     async start() {
       await domReady; // may need dom for some tests
+      await this.mutex.prom;
+
       if (this.status !== "ready") {
         return;
       }
 
-      if (this.hasFilter) {
-        this.trimJobTree();
-      }
-
       this.status = "running";
-      bus.trigger("before-all");
-      while (this.jobs.length) {
+      this.bus.trigger("before-all");
+      while (this.jobs.length && this.status === "running") {
+        let jobs = this.prepareJobs();
+        await this.mutex.add(() => this.runJobs(jobs));
+      }
+      this.bus.trigger("after-all");
+      this.status = "done";
+    }
+
+    async runJobs(jobs) {
+      for (let job of jobs) {
         if (this.status !== "running") {
-          break;
+          return;
         }
-        const job = this.jobs.shift();
         await job.run();
       }
-      bus.trigger("after-all");
-      this.status = "done";
     }
 
     stop() {
       this.status = "done";
-      bus.trigger("abort");
+      this.bus.trigger("abort");
     }
   }
 
@@ -222,15 +237,17 @@
     parent = null;
 
     /**
+     * @param {Bus} bus
      * @param {Suite | null} parent
      * @param {any} description
      */
-    constructor(parent, description) {
+    constructor(bus, parent, description) {
+      this.bus = bus;
       this.parent = parent;
       this.description = description;
     }
 
-    async run() {}
+    async run(beforeEachFns) {}
   }
 
   class Suite extends Job {
@@ -239,17 +256,21 @@
     status = "ready";
     path = [];
     suitePath = [];
+    beforeFns = [];
+    beforeEachFns = [];
+    afterFns = [];
 
     /**
+     * @param {Bus} bus
      * @param {Suite | null} parent
      * @param {string} description
      */
-    constructor(parent, description) {
-      super(parent, description);
+    constructor(bus, parent, description) {
+      super(bus, parent, description);
       this.path = parent ? parent.path.concat(description) : [description];
       this.suitePath = parent ? parent.suitePath.concat(this) : [this];
       this.hash = generateHash(this.path);
-      bus.addEventListener("abort", () => (this.status = "abort"));
+      this.bus.addEventListener("abort", () => (this.status = "abort"));
     }
 
     /**
@@ -259,14 +280,21 @@
       this.jobs.push(job);
     }
 
-    async run() {
-      bus.trigger("before-suite", this);
+    async run(beforeEachFns = []) {
+      beforeEachFns = beforeEachFns.slice().concat(this.beforeEachFns);
+      this.bus.trigger("before-suite", this);
+      for (let fn of this.beforeFns) {
+        fn();
+      }
       for (let job of this.jobs) {
         if (this.status === "ready") {
-          await job.run();
+          await job.run(beforeEachFns);
         }
       }
-      bus.trigger("after-suite", this);
+      for (let fn of this.afterFns.reverse()) {
+        fn();
+      }
+      this.bus.trigger("after-suite", this);
     }
   }
 
@@ -285,22 +313,26 @@
     pass = false;
 
     /**
+     * @param {Bus} bus
      * @param {Suite | null} parent
      * @param {string} description
      * @param {(assert: Assert) => void | Promise<void>} runTest
      */
-    constructor(parent, description, runTest) {
-      super(parent, description);
+    constructor(bus, parent, description, runTest) {
+      super(bus, parent, description);
       this.runTest = runTest;
       const parts = (parent ? parent.path : []).concat(description);
       this.hash = generateHash(parts);
     }
 
-    async run() {
+    async run(beforeEachFns = []) {
+      this.bus.trigger("before-test", this);
       const assert = new Assert();
-      bus.trigger("before-test", this);
+      for (let f of beforeEachFns) {
+        f();
+      }
       let start = Date.now();
-      if (notrycatch) {
+      if (TestRunner.config.notrycatch) {
         await this.runTest(assert);
       } else {
         let isComplete = false;
@@ -328,7 +360,7 @@
       this.pass = assert.result;
       this.assertions = assert.assertions;
       this.duration = Date.now() - start;
-      bus.trigger("after-test", this);
+      this.bus.trigger("after-test", this);
     }
   }
 
@@ -438,8 +470,8 @@
               <label for="gtest-hidepassed">Hide passed tests</label>
             </div>
             <div class="gtest-checkbox">
-              <input type="checkbox" id="gtest-notrycatch">
-              <label for="gtest-notrycatch">No try/catch</label>
+              <input type="checkbox" id="gtest-TestRunner.config.notrycatch">
+              <label for="gtest-TestRunner.config.notrycatch">No try/catch</label>
             </div>
           </div>
           <div class="gtest-status">Ready
@@ -672,15 +704,19 @@
     testIndex = 1;
     failedTests = [];
     didShowDetail = false;
+    hidePassed = false;
 
     /**
      * @param {TestRunner} runner
+     * @param {{ hidePassed: boolean}} config
      */
-    constructor(runner) {
+    constructor(runner, config) {
       this.runner = runner;
-      bus.addEventListener("test-added", () => this.testNumber++);
-      bus.addEventListener("suite-added", () => this.suiteNumber++);
-      bus.addEventListener("after-test", (ev) => {
+      this.bus = runner.bus;
+      this.hidePassed = config.hidePassed;
+      this.bus.addEventListener("test-added", () => this.testNumber++);
+      this.bus.addEventListener("suite-added", () => this.suiteNumber++);
+      this.bus.addEventListener("after-test", (ev) => {
         const test = ev.detail;
         this.doneTestNumber++;
         if (!test.pass) {
@@ -707,13 +743,15 @@
       this.runFailedBtn = document.querySelector(".gtest-run-failed");
       this.reporting = document.querySelector(".gtest-reporting");
       this.hidePassedCheckbox = document.getElementById("gtest-hidepassed");
-      this.notrycatchCheckbox = document.getElementById("gtest-notrycatch");
+      this.notrycatchCheckbox = document.getElementById(
+        "gtest-TestRunner.config.notrycatch"
+      );
 
-      if (hidePassed) {
+      if (this.hidePassed) {
         this.hidePassedCheckbox.checked = true;
         this.reporting.classList.add("gtest-hidepassed");
       }
-      if (notrycatch) {
+      if (TestRunner.config.notrycatch) {
         this.notrycatchCheckbox.checked = true;
       }
 
@@ -754,21 +792,21 @@
       });
 
       // business event handlers
-      bus.addEventListener("before-all", () => {
+      this.bus.addEventListener("before-all", () => {
         this.abortBtn.textContent = "Abort";
       });
 
-      bus.addEventListener("before-test", (ev) => {
+      this.bus.addEventListener("before-test", (ev) => {
         const { description, parent } = ev.detail;
         const fullPath = parent ? parent.path.join(" > ") : "";
         this.setStatusContent(`Running: ${fullPath}: ${description}`);
       });
 
-      bus.addEventListener("after-test", (ev) => {
+      this.bus.addEventListener("after-test", (ev) => {
         this.addTestResult(ev.detail);
       });
 
-      bus.addEventListener("after-all", () => {
+      this.bus.addEventListener("after-all", () => {
         this.abortBtn.setAttribute("disabled", "disabled");
         if (this.failedTests.length) {
           this.runFailedBtn.removeAttribute("disabled");
@@ -793,7 +831,7 @@
         const index = ev.target?.dataset?.index;
         if (index) {
           const resultDiv = ev.target.closest(".gtest-result");
-          this.toggleDetailedTestResult(index, resultDiv)
+          this.toggleDetailedTestResult(index, resultDiv);
         }
       });
 
@@ -809,9 +847,9 @@
     }
 
     toggleHidePassedTests() {
-      hidePassed = !hidePassed;
+      this.hidePassed = !this.hidePassed;
       const params = new URLSearchParams(location.search);
-      if (hidePassed) {
+      if (this.hidePassed) {
         this.reporting.classList.add("gtest-hidepassed");
         params.set("hidepassed", "1");
       } else {
@@ -824,7 +862,7 @@
 
     toggleNoTryCatch() {
       const params = new URLSearchParams(location.search);
-      if (!notrycatch) {
+      if (!TestRunner.config.notrycatch) {
         params.set("notrycatch", "1");
       } else {
         params.delete("notrycatch");
@@ -889,7 +927,9 @@
 
       if (!test.pass) {
         const showDetailConfig = TestRunner.config.showDetail;
-        const shouldShowDetail = showDetailConfig === "failed" || (showDetailConfig === "first-fail" && !this.didShowDetail);
+        const shouldShowDetail =
+          showDetailConfig === "failed" ||
+          (showDetailConfig === "first-fail" && !this.didShowDetail);
         if (shouldShowDetail) {
           this.toggleDetailedTestResult(index, div);
           this.didShowDetail = true;
@@ -961,7 +1001,7 @@
                 `<pre class="gtest-stack">${stack}</pre>`,
               ],
             ]);
-          break;
+            break;
           case "step":
             this.addInfoTable(parentEl, [
               [
@@ -1003,32 +1043,21 @@
     const div = document.createElement("div");
     div.classList.add("gtest-fixture");
     document.body.appendChild(div);
-    registerCleanup(() => div.remove());
+    afterTest(() => div.remove());
     return div;
   }
-
-  // ---------------------------------------------------------------------------
-  // Cleanup system
-  // ---------------------------------------------------------------------------
-
-  const cleanupFns = [];
-
-  function registerCleanup(cleanupFn) {
-    cleanupFns.push(cleanupFn);
-  }
-
-  bus.addEventListener("after-test", () => {
-    while (cleanupFns.length) {
-      const fn = cleanupFns.pop();
-      fn();
-    }
-  });
 
   // ---------------------------------------------------------------------------
   // Setup
   // ---------------------------------------------------------------------------
 
+  // capture location in case some testing code decides to mock it
   const runner = new TestRunner();
+
+  const location = window.location;
+  const queryParams = new URLSearchParams(location.search);
+  TestRunner.config.notrycatch = queryParams.has("notrycatch");
+
   const testId = queryParams.get("testId");
   const suiteId = queryParams.get("suiteId");
   const failedTests = sessionStorage.getItem("gtest-failed-tests");
@@ -1043,8 +1072,54 @@
   } else if (suiteId) {
     runner.addFilter({ hash: suiteId });
   }
-  const ui = new ReportingUI(runner);
+  const ui = new ReportingUI(runner, {
+    hidePassed: queryParams.has("hidepassed"),
+  });
   ui.mount();
+
+  // ---------------------------------------------------------------------------
+  // setup/cleanup system
+  // ---------------------------------------------------------------------------
+
+  function beforeSuite(callback) {
+    if (!runner.current) {
+      throw new Error(
+        `"beforeSuite" should only be called inside a suite definition`
+      );
+    }
+    runner.current.beforeFns.push(callback);
+  }
+
+  function beforeEach(callback) {
+    if (!runner.current) {
+      throw new Error(
+        `"beforeEach" should only be called inside a suite definition`
+      );
+    }
+    runner.current.beforeEachFns.push(callback);
+  }
+
+  const testCleanupFns = [];
+
+  runner.bus.addEventListener("after-test", () => {
+    while (testCleanupFns.length) {
+      const fn = testCleanupFns.pop();
+      fn();
+    }
+  });
+
+  function afterTest(callback) {
+    testCleanupFns.push(callback);
+  }
+
+  function afterSuite(callback) {
+    if (!runner.current) {
+      throw new Error(
+        `"afterSuite" should only be called inside a suite definition`
+      );
+    }
+    runner.current.afterFns.push(callback);
+  }
 
   // ---------------------------------------------------------------------------
   // Exported values
@@ -1099,6 +1174,9 @@
     test,
     start,
     getFixture,
-    registerCleanup,
+    beforeSuite,
+    beforeEach,
+    afterTest,
+    afterSuite,
   };
 })();
