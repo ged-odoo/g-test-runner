@@ -445,7 +445,7 @@
         display:inline-block;
         cursor:pointer;
         color:#ffffff;
-        font-size:15px;
+        font-size:14px;
         font-weight:bold;
         padding:6px 12px;
         text-decoration:none;
