@@ -50,6 +50,18 @@ suite('assert demo', () => {
     test('assert.step with a non string', (assert) => {
         assert.step(123);
     });
+
+    test('assert.expect, success', (assert) => {
+        assert.expect(2);
+        assert.ok(true);
+        assert.ok(true);
+    });
+
+    test('assert.expect, fail', (assert) => {
+        assert.expect(2);
+        assert.ok(true);
+    });
+
 });
 
 })();

@@ -49,9 +49,7 @@
      */
     add(cb) {
       const prom = this.prom.then(() => {
-        return new Promise((resolve) => {
-          cb().finally(resolve);
-        });
+        return cb().finally();
       });
       this.prom = prom;
       return prom;
@@ -224,7 +222,7 @@
       this.bus.trigger("before-all");
       while (this.jobs.length && this.status === "running") {
         let jobs = this.prepareJobs();
-        await this.mutex.add(() => this.runJobs(jobs));
+        await this.mutex.add(this.runJobs.bind(this, jobs));
       }
       this.bus.trigger("after-all");
       this.status = "done";
@@ -377,6 +375,7 @@
         }
         isComplete = true;
       }
+      assert._checkExpect();
       this.pass = assert.result;
       this.assertions = assert.assertions;
       this.duration = Date.now() - start;
@@ -387,6 +386,7 @@
   class Assert {
     /** @type {any[]} */
     assertions = [];
+    _checkExpect = () => {};
 
     result = true;
 
@@ -409,6 +409,22 @@
         stack,
       });
       this.result = this.result && isOK;
+    }
+
+    expect(n) {
+      const stack = new Error().stack;
+      this._checkExpect = () => {
+        const actualNumber = this.assertions.length;
+        if (actualNumber !== n) {
+          this.assertions.push({
+            type: "expect",
+            pass: false,
+            msg: `Expected ${n} assertions, but ${actualNumber} were run`,
+            stack,
+          });
+          this.result = false;
+        }
+      };
     }
 
     /**
@@ -1023,6 +1039,7 @@
             ]);
             break;
           case "step":
+          case "expect":
             this.addInfoTable(parentEl, [
               [
                 `<span class="gtest-text-darkred">Source:</span>`,
