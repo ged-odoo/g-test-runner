@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang=en>
+<head>
+<meta charset=utf-8>
+<title>gTest</title>
+</head>
+<body>
+<script src="../gtest.js"></script>
+<script>
+(function () {
+
+const {suite, test} = gTest;
+const { Mutex } = gTest.__debug__;
+
+function makeDeferred() {
+    let reject, resolve;
+    const promise = new Promise((_resolve, _reject) => {
+        reject = _reject;
+        resolve = _resolve;
+    });
+    promise.reject = reject;
+    promise.resolve = resolve;
+    return promise;
+}
+
+function nextTick() {
+    return new Promise(resolve => {
+        setTimeout(() => {
+            resolve()
+        }, 0);
+    });
+}
+
+suite('miscellaneous', 'mutex', () => {
+
+    test('simple sheduling', async (assert) => {
+
+        const mutex = new Mutex();
+        const def1 = makeDeferred(assert);
+        const def2 = makeDeferred(assert);
+
+        mutex.add(() => def1).then(() => assert.step("ok [1]"));
+        mutex.add(() => def2).then(() => assert.step("ok [2]"));
+
+        assert.verifySteps([]);
+
+        def1.resolve();
+        await nextTick();
+        
+        assert.verifySteps(["ok [1]"]);
+        
+        def2.resolve();
+        await nextTick();
+
+        assert.verifySteps(["ok [2]"]);
+    });
+
+
+    test("simple scheduling (2)", async function (assert) {
+        const mutex = new Mutex();
+        const def1 = makeDeferred(assert);
+        const def2 = makeDeferred(assert);
+
+        mutex.add(() => def1).then(() => assert.step("ok [1]"));
+        mutex.add(() => def2).then(() => assert.step("ok [2]"));
+
+        assert.verifySteps([]);
+
+        def2.resolve();
+        await nextTick();
+
+        assert.verifySteps([]);
+
+        def1.resolve();
+        await nextTick();
+
+        assert.verifySteps(["ok [1]", "ok [2]"]);
+    });
+
+});
+
+})();
+
+</script>
+</body>
+</html>

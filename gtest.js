@@ -104,6 +104,9 @@
     hashSet = new Set();
 
     constructor() {
+      // This works before there is a mutex guaranteeing that we do not mix
+      // defining suites and running suites. So, the current suite is always
+      // either the last suite being created, or the currently running suite
       this.bus.addEventListener("before-suite", (ev) => {
         this.suiteStack.push(ev.detail);
       });
@@ -1168,6 +1171,8 @@
     __debug__: {
       runner,
       ui,
+      Mutex,
+      TestRunner
     },
     config: TestRunner.config,
     suite,
