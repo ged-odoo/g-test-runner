@@ -56,6 +56,15 @@
       this.prom = prom;
       return prom;
     }
+
+    whenReady() {
+      let prom = this.prom;
+      return prom.then(() => {
+        if (prom !== this.prom) {
+          return this.whenReady();
+        }
+      });
+    }
   }
 
   class Bus extends EventTarget {
@@ -78,6 +87,7 @@
       autostart: true,
       showDetail: "first-fail",
       notrycatch: false,
+      failFast: false,
     };
 
     bus = new Bus();
@@ -197,10 +207,17 @@
 
     async start() {
       await domReady; // may need dom for some tests
-      await this.mutex.prom;
+      await this.mutex.whenReady();
 
       if (this.status !== "ready") {
         return;
+      }
+      if (TestRunner.config.failFast) {
+        this.bus.addEventListener("after-test", (ev) => {
+          if (!ev.detail.pass) {
+            this.stop();
+          }
+        });
       }
 
       this.status = "running";
@@ -1172,7 +1189,7 @@
       runner,
       ui,
       Mutex,
-      TestRunner
+      TestRunner,
     },
     config: TestRunner.config,
     suite,

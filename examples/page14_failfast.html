@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang=en>
+<head>
+<meta charset=utf-8>
+<title>gTest</title>
+</head>
+<body>
+<script src="../gtest.js"></script>
+<script>
+(function () {
+
+const {suite, test, registerCleanup} = gTest;
+
+gTest.config.failFast = true;
+
+suite('fail fast demo', () => {
+
+    test('test 1', async (assert) => {
+        assert.ok(true);
+    });
+
+    test('test 2', async (assert) => {
+        assert.ok(false);
+    });
+
+    test('test 3', async (assert) => {
+        assert.ok(true);
+    });
+
+    test('test 4', async (assert) => {
+        assert.ok(true);
+    });
+});
+
+})();
+
+</script>
+</body>
+</html>
