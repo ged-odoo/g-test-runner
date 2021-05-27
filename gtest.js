@@ -748,6 +748,11 @@
       .gtest-cell a {
         color: #444444;
       }
+
+      .gtest-cell a, .gtest-name {
+        user-select: text;
+      }
+
       .gtest-duration {
         float: right;
         font-size: smaller;
@@ -902,6 +907,19 @@
       if (TestRunner.config.autostart) {
         runner.start();
       }
+      this.reporting.addEventListener("click", (ev) => {
+        if (ev.target.tagName === "A") {
+          const selection = window.getSelection();
+          if (
+            ev.target.contains(selection.focusNode) &&
+            ev.target.contains(selection.anchorNode) &&
+            !selection.isCollapsed
+          ) {
+            ev.preventDefault();
+            ev.stopPropagation();
+          }
+        }
+      });
     }
 
     toggleHidePassedTests() {
@@ -960,9 +978,11 @@
           params.set("suiteId", s.hash);
           params.delete("testId");
           params.delete("tag");
-          return `<a href="${getUrlWithParams(params)}">${s.description}</a>`;
+          return `<a href="${getUrlWithParams(params)}" draggable="false">${
+            s.description
+          }</a>`;
         });
-        const fullPath = suiteLinks.join(" > ") + " >";
+        const fullPath = suiteLinks.join(" > ") + " > ";
         suitesHtml = `<span class="gtest-cell">${index}. ${fullPath}</span>`;
       }
 
@@ -971,7 +991,7 @@
       params.delete("tag");
       params.delete("suiteId");
       const url = getUrlWithParams(params);
-      const testHtml = `<a class="gtest-name" href="${url}">${test.description} (${test.assertions.length})</a>`;
+      const testHtml = `<a class="gtest-name" draggable="false" href="${url}">${test.description} (${test.assertions.length})</a>`;
       const tags = test.tags
         .map((t) => {
           params.delete("testId");
