@@ -48,20 +48,12 @@
      * @param { () => Promise<void>} cb
      */
     add(cb) {
-      const prom = this.prom.then(() => {
-        return cb().finally();
+      this.prom = this.prom.then(() => {
+        return new Promise((resolve) => {
+          cb().finally(resolve);
+        });
       });
-      this.prom = prom;
-      return prom;
-    }
-
-    whenReady() {
-      let prom = this.prom;
-      return prom.then(() => {
-        if (prom !== this.prom) {
-          return this.whenReady();
-        }
-      });
+      return this.prom;
     }
   }
 
@@ -110,11 +102,11 @@
     // miscellaneous filtering rules
     hasFilter = false;
     hashSet = new Set();
+    tagSet = new Set();
 
     constructor() {
-      // This works before there is a mutex guaranteeing that we do not mix
-      // defining suites and running suites. So, the current suite is always
-      // either the last suite being created, or the currently running suite
+      // This works because defining suites is synchronous, so it cannot be
+      // interleaved with test execution
       this.bus.addEventListener("before-suite", (ev) => {
         this.suiteStack.push(ev.detail);
       });
@@ -128,16 +120,22 @@
       if (filter.hash) {
         this.hashSet.add(filter.hash);
       }
+      if (filter.tag) {
+        this.tagSet.add(filter.tag);
+      }
     }
 
     /**
      * @param {string} description
      * @param {(assert: Assert) => void | Promise<void>} testFn
+     * @param {{only?: boolean, tags?: string[]}} options
      */
-    addTest(description, testFn, only = false) {
-      const test = new Test(this.bus, this.current, description, testFn);
+    addTest(description, testFn, options = {}) {
+      const parentTags = this.current ? this.current.tags : [];
+      const tags = parentTags.concat(options.tags || []);
+      const test = new Test(this.bus, this.current, description, testFn, tags);
       this.addJob(test);
-      if (only) {
+      if (options.only) {
         this.addFilter({ hash: test.hash });
       }
       this.bus.trigger("test-added", test);
@@ -146,24 +144,24 @@
     /**
      * @param {string} description
      * @param {() => any} suiteFn
+     * @param {{only?: boolean, tags?: string[]}} options
      */
-    addSuite(description, suiteFn, only = false) {
-      const suite = new Suite(this.bus, this.current, description);
-      if (only) {
+    async addSuite(description, suiteFn, options) {
+      const parentTags = this.current ? this.current.tags : [];
+      const testTags = options.tags || [];
+      const tags = parentTags.concat(testTags);
+      const suite = new Suite(this.bus, this.current, description, tags);
+      this.addJob(suite);
+      this.suiteStack.push(suite);
+      if (options.only) {
         this.addFilter({ hash: suite.hash });
       }
-      this.addJob(suite);
-      this.bus.trigger("suite-added", suite);
-      this.mutex.add(async () => {
-        this.suiteStack.push(suite);
-        try {
-          await suiteFn();
-        } catch (e) {
-          throw e;
-        } finally {
-          this.suiteStack.pop();
-        }
-      });
+      try {
+        suiteFn();
+      } finally {
+        this.suiteStack.pop();
+        this.bus.trigger("suite-added", suite);
+      }
     }
 
     /**
@@ -179,17 +177,12 @@
     }
 
     prepareJobs() {
-      const hashSet = this.hashSet;
-      const jobs = this.hasFilter ? getValidJobs(this.jobs) : this.jobs;
-      this.jobs = [];
-      return jobs;
-
-      function shouldBeRun(job) {
-        if (hashSet.has(job.hash)) {
+      function shouldBeRun(job, predicate) {
+        if (predicate(job)) {
           return true;
         }
         if (job instanceof Suite) {
-          let subJobs = getValidJobs(job.jobs);
+          let subJobs = getValidJobs(job.jobs, predicate);
           if (subJobs.length) {
             job.jobs = subJobs;
             return true;
@@ -198,14 +191,27 @@
         return false;
       }
 
-      function getValidJobs(jobs) {
-        return jobs.filter(shouldBeRun);
+      function getValidJobs(jobs, predicate) {
+        return jobs.filter((job) => shouldBeRun(job, predicate));
       }
+
+      let jobs = this.jobs;
+      this.jobs = [];
+
+      const hashSet = this.hashSet;
+      if (hashSet.size) {
+        jobs = getValidJobs(jobs, (job) => hashSet.has(job.hash));
+      }
+
+      const tagSet = this.tagSet;
+      if (tagSet.size) {
+        jobs = getValidJobs(jobs, (job) => job.tags.some((t) => tagSet.has(t)));
+      }
+      return jobs;
     }
 
     async start() {
       await domReady; // may need dom for some tests
-      await this.mutex.whenReady();
 
       if (this.status !== "ready") {
         return;
@@ -220,6 +226,7 @@
 
       this.status = "running";
       this.bus.trigger("before-all");
+
       while (this.jobs.length && this.status === "running") {
         let jobs = this.prepareJobs();
         await this.mutex.add(this.runJobs.bind(this, jobs));
@@ -282,12 +289,14 @@
      * @param {Bus} bus
      * @param {Suite | null} parent
      * @param {string} description
+     * @param {string[]} [tags]
      */
-    constructor(bus, parent, description) {
+    constructor(bus, parent, description, tags = []) {
       super(bus, parent, description);
       this.path = parent ? parent.path.concat(description) : [description];
       this.suitePath = parent ? parent.suitePath.concat(this) : [this];
       this.hash = generateHash(this.path);
+      this.tags = tags;
       this.bus.addEventListener("abort", () => (this.status = "abort"));
     }
 
@@ -335,12 +344,14 @@
      * @param {Suite | null} parent
      * @param {string} description
      * @param {(assert: Assert) => void | Promise<void>} runTest
+     * @param {string[]} [tags]
      */
-    constructor(bus, parent, description, runTest) {
+    constructor(bus, parent, description, runTest, tags = []) {
       super(bus, parent, description);
       this.runTest = runTest;
       const parts = (parent ? parent.path : []).concat(description);
       this.hash = generateHash(parts);
+      this.tags = tags;
     }
 
     async run(beforeEachFns = []) {
@@ -640,6 +651,16 @@
         color: green;
       }
 
+      .gtest-tag {
+        margin: 5px;
+        background: darkcyan;
+        color: white;
+        padding: 2px 5px;
+        font-size: 13px;
+        font-weight: bold;
+        border-radius: 7px;
+      }
+
       .gtest-reporting {
         padding-left: 20px;
         font-size: 14px;
@@ -717,9 +738,10 @@
         color: #366097;
         font-weight: 700;
         cursor: pointer;
+        padding: 2px 4px;
       }
       .gtest-cell {
-        padding: 5px;
+        padding: 2px;
         font-weight: bold;
       }
 
@@ -797,8 +819,8 @@
       const params = new URLSearchParams(search);
       params.delete("testId");
       params.delete("suiteId");
-      const query = params.toString();
-      const href = `${location.pathname}${query}${location.hash}`;
+      params.delete("tag");
+      const href = getUrlWithParams(params);
       runLink.setAttribute("href", href);
       runFailedLink.setAttribute("href", location.href);
       runFailedLink.addEventListener("click", () => {
@@ -937,6 +959,7 @@
         const suiteLinks = suite.suitePath.map((s) => {
           params.set("suiteId", s.hash);
           params.delete("testId");
+          params.delete("tag");
           return `<a href="${getUrlWithParams(params)}">${s.description}</a>`;
         });
         const fullPath = suiteLinks.join(" > ") + " >";
@@ -945,11 +968,21 @@
 
       params = new URLSearchParams(location.search);
       params.set("testId", test.hash);
+      params.delete("tag");
+      params.delete("suiteId");
       const url = getUrlWithParams(params);
       const testHtml = `<a class="gtest-name" href="${url}">${test.description} (${test.assertions.length})</a>`;
-      const openBtn = `<span class="gtest-open" data-index="${index}"> open </span>`;
+      const tags = test.tags
+        .map((t) => {
+          params.delete("testId");
+          params.set("tag", t);
+          const tagUrl = getUrlWithParams(params);
+          return `<a class="gtest-tag" href="${tagUrl}">${t}</a>`;
+        })
+        .join("");
+      const openBtn = `<span class="gtest-open" data-index="${index}"> toggle </span>`;
       const durationHtml = `<span class="gtest-duration">${test.duration} ms</span>`;
-      header.innerHTML = suitesHtml + testHtml + openBtn + durationHtml;
+      header.innerHTML = suitesHtml + testHtml + tags + openBtn + durationHtml;
       header.prepend(result);
 
       // test result div
@@ -1095,8 +1128,14 @@
   const queryParams = new URLSearchParams(location.search);
   TestRunner.config.notrycatch = queryParams.has("notrycatch");
 
+  const tag = queryParams.get("tag");
+  if (tag) {
+    runner.addFilter({ tag });
+  }
+
   const testId = queryParams.get("testId");
   const suiteId = queryParams.get("suiteId");
+
   const failedTests = sessionStorage.getItem("gtest-failed-tests");
   if (failedTests) {
     sessionStorage.removeItem("gtest-failed-tests");
@@ -1166,22 +1205,30 @@
    * @param {any} description
    * @param {{ (): void; (): void; }} [cb]
    */
-  function suite(description, cb) {
-    if (typeof cb === "string") {
+  function suite(description, options, cb) {
+    if (typeof options === "string") {
       // nested suite definition
       let nestedArgs = Array.from(arguments).slice(1);
       suite(description, () => suite(...nestedArgs));
     } else {
-      runner.addSuite(description, cb);
+      if (!cb) {
+        cb = options;
+        options = {};
+      }
+      runner.addSuite(description, cb, options);
     }
   }
 
-  suite.only = function restrict(description, cb) {
+  suite.only = function restrict(description, options, cb) {
     if (typeof cb === "string") {
       let nestedArgs = Array.from(arguments).slice(1);
-      suite(description, () => suite.only(...nestedArgs));
+      suite(description, options, () => suite.only(...nestedArgs));
     } else {
-      runner.addSuite(description, cb, true);
+      if (!cb) {
+        cb = options;
+        options = {};
+      }
+      runner.addSuite(description, cb, options);
     }
   };
 
@@ -1189,12 +1236,21 @@
    * @param {string} description
    * @param {(assert: Assert) => void | Promise<void>} runTest
    */
-  function test(description, runTest) {
-    runner.addTest(description, runTest);
+  function test(description, options, runTest) {
+    if (!runTest) {
+      runTest = options;
+      options = {};
+    }
+    runner.addTest(description, runTest, options);
   }
 
-  test.only = function restrict(description, runTest) {
-    runner.addTest(description, runTest, true);
+  test.only = function restrict(description, options, runTest) {
+    if (!runTest) {
+      runTest = options;
+      options = {};
+    }
+    options.only = true;
+    test(description, options, runTest);
   };
 
   async function start() {

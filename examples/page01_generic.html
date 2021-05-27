@@ -19,15 +19,14 @@ suite('math', () => {
 
     test('simple addition', (assert) => {
         assert.equal(1 + 1, 2, "1 + 1 should be equal to 2");
-        assert.equal(1 + 2, 4);
+        assert.equal(1 + 2, 3);
     });
 
-    test('addition with negative number', (assert) => {
+    test('addition with negative number', {tags: ['mobile-only']}, (assert) => {
         assert.equal(3 + (-1), 2);
         assert.ok(true, "this work!")
     });
 });
-
 
 suite('utils', () => {
 
@@ -45,10 +44,25 @@ suite('utils', () => {
             assert.ok(0, 'hey');
         });
 
-        test('blabla', assert => {
+        test('blabla', {tags: ['mobile-only']}, assert => {
             assert.ok(1, 'hey');
         });
     })
+});
+
+
+suite('utils', 'other sub suite', () => {
+
+    test('peppa pig', assert => {
+        assert.equal(1 + 1, 2);
+        assert.equal(1 + 1, 2);
+        assert.equal(1 + 1, 2);
+    });
+
+    test('dinosaur', assert => {
+        assert.equal(3 + (-1), 2);
+        assert.ok(false);
+    });
 });
 
 })();
