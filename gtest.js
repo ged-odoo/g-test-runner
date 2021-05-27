@@ -41,22 +41,6 @@
     return `${location.pathname}${query ? "?" + query : ""}${location.hash}`;
   }
 
-  class Mutex {
-    prom = Promise.resolve();
-
-    /**
-     * @param { () => Promise<void>} cb
-     */
-    add(cb) {
-      this.prom = this.prom.then(() => {
-        return new Promise((resolve) => {
-          cb().finally(resolve);
-        });
-      });
-      return this.prom;
-    }
-  }
-
   class Bus extends EventTarget {
     /**
      * @param {string} name
@@ -82,7 +66,6 @@
 
     bus = new Bus();
 
-    mutex = new Mutex();
     /** @type {Job[]} */
     roots = [];
 
@@ -244,19 +227,15 @@
 
       while (this.jobs.length && this.status === "running") {
         let jobs = this.prepareJobs();
-        await this.mutex.add(this.runJobs.bind(this, jobs));
+        for (let job of jobs) {
+          if (this.status !== "running") {
+            return;
+          }
+          await job.run();
+        }
       }
       this.bus.trigger("after-all");
       this.status = "done";
-    }
-
-    async runJobs(jobs) {
-      for (let job of jobs) {
-        if (this.status !== "running") {
-          return;
-        }
-        await job.run();
-      }
     }
 
     stop() {
@@ -1347,7 +1326,6 @@
     __debug__: {
       runner,
       ui,
-      Mutex,
       TestRunner,
     },
     config: TestRunner.config,
