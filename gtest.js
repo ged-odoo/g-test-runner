@@ -103,6 +103,7 @@
     hasFilter = false;
     hashSet = new Set();
     tagSet = new Set();
+    textFilter = "";
 
     constructor() {
       // This works because defining suites is synchronous, so it cannot be
@@ -122,6 +123,9 @@
       }
       if (filter.tag) {
         this.tagSet.add(filter.tag);
+      }
+      if (filter.text) {
+        this.textFilter = filter.text;
       }
     }
 
@@ -206,6 +210,17 @@
       const tagSet = this.tagSet;
       if (tagSet.size) {
         jobs = getValidJobs(jobs, (job) => job.tags.some((t) => tagSet.has(t)));
+      }
+
+      const filterText = this.textFilter;
+      if (filterText) {
+        jobs = getValidJobs(jobs, (job) => {
+          const txt =
+            job instanceof Suite
+              ? job.path.join(" > ")
+              : job.parent.path.concat(job.description).join(" > ");
+          return txt.includes(filterText);
+        });
       }
       return jobs;
     }
@@ -520,6 +535,11 @@
               <input type="checkbox" id="gtest-TestRunner.config.notrycatch">
               <label for="gtest-TestRunner.config.notrycatch">No try/catch</label>
             </div>
+            <div class="gtest-search">
+              <span>Filter: </span>
+              <input />
+              <button class="gtest-btn gtest-go" disabled="disabled">Go</button>
+            </div>
           </div>
           <div class="gtest-status">Ready
           </div>
@@ -651,6 +671,17 @@
         color: green;
       }
 
+      .gtest-search {
+        float: right;
+        margin: 0 10px;
+        color: #333333;
+      }
+
+      .gtest-search input {
+        height: 22px;
+        width: 400px;
+      }
+
       .gtest-tag {
         margin: 5px;
         background: darkcyan;
@@ -695,6 +726,9 @@
         text-decoration: none;
       }
 
+      .gtest-result-header .gtest-circle {
+        margin-right: 5px;
+      }
       .gtest-result-header .gtest-open {
         padding: 4px;
         color: #C2CCD1;
@@ -809,6 +843,8 @@
       this.notrycatchCheckbox = document.getElementById(
         "gtest-TestRunner.config.notrycatch"
       );
+      this.searchInput = document.querySelector(".gtest-search input");
+      this.searchButton = document.querySelector(".gtest-search button");
 
       if (this.hidePassed) {
         this.hidePassedCheckbox.checked = true;
@@ -825,6 +861,7 @@
       params.delete("testId");
       params.delete("suiteId");
       params.delete("tag");
+      params.delete("filter");
       const href = getUrlWithParams(params);
       runLink.setAttribute("href", href);
       runFailedLink.setAttribute("href", location.href);
@@ -889,6 +926,31 @@
           document.title = `✖ ${document.title}`;
         }
       });
+
+      this.searchInput.value = runner.textFilter;
+      this.searchInput.addEventListener("input", (ev) => {
+        const str = ev.target.value.trim();
+        if (str !== runner.textFilter) {
+          this.searchButton.removeAttribute("disabled");
+        } else {
+          this.searchButton.setAttribute("disabled", "disabled");
+        }
+      });
+
+      const searchInput = this.searchInput;
+      this.searchInput.addEventListener("keyup", (ev) => {
+        if (ev.keyCode === 13) {
+          activateFilter();
+        }
+      });
+      this.searchButton.addEventListener("click", activateFilter);
+
+      function activateFilter() {
+        const filter = searchInput.value.trim();
+        const params = new URLSearchParams(location.search);
+        params.set("filter", filter);
+        location.href = getUrlWithParams(params);
+      }
 
       this.reporting.addEventListener("click", (ev) => {
         const index = ev.target?.dataset?.index;
@@ -1000,7 +1062,7 @@
           return `<a class="gtest-tag" href="${tagUrl}">${t}</a>`;
         })
         .join("");
-      const openBtn = `<span class="gtest-open" data-index="${index}"> toggle </span>`;
+      const openBtn = `<span class="gtest-open" data-index="${index}"> toggle details</span>`;
       const durationHtml = `<span class="gtest-duration">${test.duration} ms</span>`;
       header.innerHTML = suitesHtml + testHtml + tags + openBtn + durationHtml;
       header.prepend(result);
@@ -1151,6 +1213,10 @@
   const tag = queryParams.get("tag");
   if (tag) {
     runner.addFilter({ tag });
+  }
+  const filter = queryParams.get("filter");
+  if (filter) {
+    runner.addFilter({ text: filter });
   }
 
   const testId = queryParams.get("testId");
