@@ -16,7 +16,7 @@
    * rigorously collision resistant hashing function
    *
    * @param {string[]} strings
-   * @returns
+   * @returns {string}
    */
   function generateHash(strings) {
     const str = strings.join("\x1C");
@@ -27,8 +27,9 @@
       hash |= 0;
     }
 
-    // Convert the possibly negative integer hash code into an 8 character hex string, which isn't
-    // strictly necessary but increases user understanding that the id is a SHA-like hash
+    // Convert the possibly negative integer hash code into an 8 character hex
+    // string, which isn't strictly necessary but increases user understanding
+    // that the id is a SHA-like hash
     let hex = (0x100000000 + hash).toString(16);
     if (hex.length < 8) {
       hex = "0000000" + hex;
@@ -36,6 +37,11 @@
     return hex.slice(-8);
   }
 
+  /**
+   *
+   * @param {URLSearchParams} params
+   * @returns {string}
+   */
   function getUrlWithParams(params) {
     const query = params.toString();
     return `${location.pathname}${query ? "?" + query : ""}${location.hash}`;
@@ -55,6 +61,10 @@
   // TestRunner
   // ---------------------------------------------------------------------------
 
+  class TimeoutError extends Error {
+    name = "TimeoutError";
+  }
+
   class TestRunner {
     static config = {
       timeout: 10000,
@@ -65,9 +75,6 @@
     };
 
     bus = new Bus();
-
-    /** @type {Job[]} */
-    roots = [];
 
     /** @type {Job[]} */
     jobs = [];
@@ -87,17 +94,6 @@
     hashSet = new Set();
     tagSet = new Set();
     textFilter = "";
-
-    constructor() {
-      // This works because defining suites is synchronous, so it cannot be
-      // interleaved with test execution
-      this.bus.addEventListener("before-suite", (ev) => {
-        this.suiteStack.push(ev.detail);
-      });
-      this.bus.addEventListener("after-suite", () => {
-        this.suiteStack.pop();
-      });
-    }
 
     addFilter(filter = {}) {
       this.hasFilter = true;
@@ -120,8 +116,8 @@
     addTest(description, testFn, options = {}) {
       const parentTags = this.current ? this.current.tags : [];
       const tags = parentTags.concat(options.tags || []);
-      const test = new Test(this.bus, this.current, description, testFn, tags);
-      this.addJob(test);
+      const test = new Test(this.current, description, testFn, tags);
+      (this.current ? this.current.jobs : this.jobs).push(test);
       if (options.only) {
         this.addFilter({ hash: test.hash });
       }
@@ -137,8 +133,8 @@
       const parentTags = this.current ? this.current.tags : [];
       const testTags = options.tags || [];
       const tags = parentTags.concat(testTags);
-      const suite = new Suite(this.bus, this.current, description, tags);
-      this.addJob(suite);
+      const suite = new Suite(this.current, description, tags);
+      (this.current ? this.current.jobs : this.jobs).push(suite);
       this.suiteStack.push(suite);
       if (options.only) {
         this.addFilter({ hash: suite.hash });
@@ -148,18 +144,6 @@
       } finally {
         this.suiteStack.pop();
         this.bus.trigger("suite-added", suite);
-      }
-    }
-
-    /**
-     * @param {Job} job
-     */
-    addJob(job) {
-      if (this.current) {
-        this.current.addJob(job);
-      } else {
-        this.roots.push(job);
-        this.jobs.push(job);
       }
     }
 
@@ -227,11 +211,70 @@
 
       while (this.jobs.length && this.status === "running") {
         let jobs = this.prepareJobs();
-        for (let job of jobs) {
-          if (this.status !== "running") {
-            return;
+        let node = jobs.shift();
+        let beforeTestFns = [];
+        while (node && this.status === "running") {
+          if (node instanceof Suite) {
+            if (node.visited === 0) {
+              // before suite code
+              this.bus.trigger("before-suite", node);
+              this.suiteStack.push(node);
+              for (let fn of node.beforeFns) {
+                fn();
+              }
+              beforeTestFns.push(...node.beforeEachFns);
+            }
+            if (node.visited === node.jobs.length) {
+              // after suite code
+              for (let f of node.beforeEachFns) {
+                beforeTestFns.pop();
+              }
+              for (let fn of node.afterFns.reverse()) {
+                fn();
+              }
+              this.suiteStack.pop();
+              this.bus.trigger("after-suite", node);
+            }
+            node = node.jobs[node.visited++] || node.parent || jobs.shift();
+          } else if (node instanceof Test) {
+            this.bus.trigger("before-test", node);
+            const assert = new Assert();
+            for (let f of beforeTestFns) {
+              f();
+            }
+            let start = Date.now();
+            if (TestRunner.config.notrycatch) {
+              await node.run(assert);
+            } else {
+              let isComplete = false;
+              let timeOut = new Promise((resolve, reject) => {
+                setTimeout(() => {
+                  if (isComplete) {
+                    resolve();
+                  } else {
+                    reject(
+                      new TimeoutError(
+                        `test took longer than ${TestRunner.config.timeout}ms`
+                      )
+                    );
+                  }
+                }, TestRunner.config.timeout);
+              });
+              try {
+                await Promise.race([timeOut, node.run(assert)]);
+              } catch (e) {
+                node.error = e;
+                assert.result = false;
+              }
+              isComplete = true;
+            }
+            assert._checkExpect();
+            node.pass = assert.result;
+            node.assertions = assert.assertions;
+            node.duration = Date.now() - start;
+            this.bus.trigger("after-test", node);
+            node = node.parent || jobs.shift();
           }
-          await job.run();
         }
       }
       this.bus.trigger("after-all");
@@ -240,7 +283,6 @@
 
     stop() {
       this.status = "done";
-      this.bus.trigger("abort");
     }
   }
 
@@ -256,17 +298,13 @@
     parent = null;
 
     /**
-     * @param {Bus} bus
      * @param {Suite | null} parent
      * @param {any} description
      */
-    constructor(bus, parent, description) {
-      this.bus = bus;
+    constructor(parent, description) {
       this.parent = parent;
       this.description = description;
     }
-
-    async run(beforeEachFns) {}
   }
 
   class Suite extends Job {
@@ -278,49 +316,20 @@
     beforeFns = [];
     beforeEachFns = [];
     afterFns = [];
+    visited = 0;
 
     /**
-     * @param {Bus} bus
      * @param {Suite | null} parent
      * @param {string} description
      * @param {string[]} [tags]
      */
-    constructor(bus, parent, description, tags = []) {
-      super(bus, parent, description);
+    constructor(parent, description, tags = []) {
+      super(parent, description);
       this.path = parent ? parent.path.concat(description) : [description];
       this.suitePath = parent ? parent.suitePath.concat(this) : [this];
       this.hash = generateHash(this.path);
       this.tags = tags;
-      this.bus.addEventListener("abort", () => (this.status = "abort"));
     }
-
-    /**
-     * @param {Job} job
-     */
-    addJob(job) {
-      this.jobs.push(job);
-    }
-
-    async run(beforeEachFns = []) {
-      beforeEachFns = beforeEachFns.slice().concat(this.beforeEachFns);
-      this.bus.trigger("before-suite", this);
-      for (let fn of this.beforeFns) {
-        fn();
-      }
-      for (let job of this.jobs) {
-        if (this.status === "ready") {
-          await job.run(beforeEachFns);
-        }
-      }
-      for (let fn of this.afterFns.reverse()) {
-        fn();
-      }
-      this.bus.trigger("after-suite", this);
-    }
-  }
-
-  class TimeoutError extends Error {
-    name = "TimeoutError";
   }
 
   class Test extends Job {
@@ -334,57 +343,17 @@
     pass = false;
 
     /**
-     * @param {Bus} bus
      * @param {Suite | null} parent
      * @param {string} description
      * @param {(assert: Assert) => void | Promise<void>} runTest
      * @param {string[]} [tags]
      */
-    constructor(bus, parent, description, runTest, tags = []) {
-      super(bus, parent, description);
-      this.runTest = runTest;
+    constructor(parent, description, runTest, tags = []) {
+      super(parent, description);
+      this.run = runTest;
       const parts = (parent ? parent.path : []).concat(description);
       this.hash = generateHash(parts);
       this.tags = tags;
-    }
-
-    async run(beforeEachFns = []) {
-      this.bus.trigger("before-test", this);
-      const assert = new Assert();
-      for (let f of beforeEachFns) {
-        f();
-      }
-      let start = Date.now();
-      if (TestRunner.config.notrycatch) {
-        await this.runTest(assert);
-      } else {
-        let isComplete = false;
-        let timeOut = new Promise((resolve, reject) => {
-          setTimeout(() => {
-            if (isComplete) {
-              resolve();
-            } else {
-              reject(
-                new TimeoutError(
-                  `test took longer than ${TestRunner.config.timeout}ms`
-                )
-              );
-            }
-          }, TestRunner.config.timeout);
-        });
-        try {
-          await Promise.race([timeOut, this.runTest(assert)]);
-        } catch (e) {
-          this.error = e;
-          assert.result = false;
-        }
-        isComplete = true;
-      }
-      assert._checkExpect();
-      this.pass = assert.result;
-      this.assertions = assert.assertions;
-      this.duration = Date.now() - start;
-      this.bus.trigger("after-test", this);
     }
   }
 
@@ -877,8 +846,10 @@
 
       this.bus.addEventListener("before-test", (ev) => {
         const { description, parent } = ev.detail;
-        const fullPath = parent ? parent.path.join(" > ") : "";
-        this.setStatusContent(`Running: ${fullPath}: ${description}`);
+        const fullPath = (parent ? parent.path : [])
+          .concat(description)
+          .join(" > ");
+        this.setStatusContent(`Running: ${fullPath}`);
       });
 
       this.bus.addEventListener("after-test", (ev) => {
