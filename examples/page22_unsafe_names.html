@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang=en>
+<head>
+<meta charset=utf-8>
+<title>gTest</title>
+</head>
+<body>
+<script src="../gtest.js"></script>
+<script>
+(function () {
+
+const {suite, test} = gTest;
+
+/**
+ * Simple generic test suite
+ */
+
+suite('this <div>suite</div> name has <b>html</b>', () => {
+
+    test('same for <span>this test</span>', (assert) => {
+        assert.equal(1 + 2, 3);
+        assert.equal(1 + 2, 3, "some <html> in this </html> assertion message");
+        assert.equal("<abc>def</abc>", "<def>abc</def>");
+    });
+
+});
+
+})();
+
+</script>
+</body>
+</html>

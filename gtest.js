@@ -57,6 +57,12 @@
     }
   }
 
+  function escapeHTML(str) {
+    const div = document.createElement("div");
+    div.innerText = str;
+    return div.innerHTML;
+  }
+
   // ---------------------------------------------------------------------------
   // TestRunner
   // ---------------------------------------------------------------------------
@@ -183,7 +189,7 @@
         jobs = getValidJobs(jobs, (job) => job.tags.some((t) => tagSet.has(t)));
       }
 
-      const filterText = this.textFilter;
+      const filterText = escapeHTML(this.textFilter);
       if (filterText) {
         jobs = getValidJobs(jobs, (job) => {
           const txt =
@@ -307,8 +313,10 @@
      */
     constructor(parent, description, tags = []) {
       this.parent = parent || null;
-      this.description = description;
-      this.path = parent ? parent.path.concat(description) : [description];
+      this.description = escapeHTML(description);
+      this.path = parent
+        ? parent.path.concat(this.description)
+        : [this.description];
       this.suitePath = parent ? parent.suitePath.concat(this) : [this];
       this.hash = generateHash(this.path);
       this.tags = tags;
@@ -333,9 +341,9 @@
      */
     constructor(parent, description, runTest, tags = []) {
       this.parent = parent || null;
-      this.description = description;
+      this.description = escapeHTML(description);
       this.run = runTest;
-      const parts = (parent ? parent.path : []).concat(description);
+      const parts = (parent ? parent.path : []).concat(this.description);
       this.hash = generateHash(parts);
       this.tags = tags;
     }
@@ -911,6 +919,9 @@
       statusPanel.innerHTML = content;
     }
 
+    let start;
+    bus.addEventListener("before-all", () => (start = Date.now()));
+
     bus.addEventListener("before-test", (ev) => {
       const { description, parent } = ev.detail;
       const fullPath = (parent ? parent.path : [])
@@ -929,7 +940,8 @@
       const errors = failedTestNumber
         ? `, with ${failedTestNumber} failed`
         : "";
-      const status = `<span class="gtest-circle ${statusCls}"></span> ${msg}${suiteInfo}${errors}`;
+      const timeInfo = ` (total time: ${Date.now() - start} ms)`;
+      const status = `<span class="gtest-circle ${statusCls}"></span> ${msg}${suiteInfo}${errors}${timeInfo}`;
       setStatusContent(status);
     });
 
@@ -1101,11 +1113,11 @@
             addInfoTable(parentEl, [
               [
                 `<span class="gtest-text-green">Expected:</span>`,
-                `<span>${assertion.expected}</span>`,
+                `<span>${escapeHTML(assertion.expected)}</span>`,
               ],
               [
                 `<span class="gtest-text-red">Result:</span>`,
-                `<span>${assertion.value}</span>`,
+                `<span>${escapeHTML(assertion.value)}</span>`,
               ],
               [
                 `<span class="gtest-text-darkred">Source:</span>`,
