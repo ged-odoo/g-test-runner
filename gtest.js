@@ -233,9 +233,6 @@
               for (let f of node.beforeEachFns) {
                 beforeTestFns.pop();
               }
-              for (let fn of node.afterFns.reverse()) {
-                fn();
-              }
               this.suiteStack.pop();
               this.bus.trigger("after-suite", node);
             }
@@ -301,7 +298,6 @@
     suitePath = [];
     beforeFns = [];
     beforeEachFns = [];
-    afterFns = [];
     visited = 0;
 
     /**
@@ -1226,13 +1222,27 @@
       testCleanupFns.push(callback);
     }
 
+    const suiteCleanupStack = [];
+
+    runner.bus.addEventListener("before-suite", () => {
+      suiteCleanupStack.push([]);
+    });
+
+    runner.bus.addEventListener("after-suite", () => {
+      const fns = suiteCleanupStack.pop();
+      while (fns.length) {
+        fns.pop()();
+      }
+    });
+
     function afterSuite(callback) {
-      if (!runner.current) {
+      const fns = suiteCleanupStack[suiteCleanupStack.length - 1];
+      if (!fns) {
         throw new Error(
-          `"afterSuite" should only be called inside a suite definition`
+          `"afterSuite" can only be called when a suite is currently running`
         );
       }
-      runner.current.afterFns.push(callback);
+      fns.push(callback);
     }
 
     /**
