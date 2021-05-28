@@ -139,11 +139,15 @@
       if (options.only) {
         this.addFilter({ hash: suite.hash });
       }
+      let result;
       try {
-        suiteFn();
+        result = suiteFn();
       } finally {
         this.suiteStack.pop();
         this.bus.trigger("suite-added", suite);
+      }
+      if (result !== undefined) {
+        throw new Error("Invalid suite definition: cannot return a value");
       }
     }
 
@@ -287,30 +291,12 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Job, Test, Suite classes
+  // Test, Suite classes
   // ---------------------------------------------------------------------------
 
-  class Job {
-    static nextId = 1;
-    id = Job.nextId++;
-
-    /** @type {Suite | null} */
-    parent = null;
-
-    /**
-     * @param {Suite | null} parent
-     * @param {any} description
-     */
-    constructor(parent, description) {
-      this.parent = parent;
-      this.description = description;
-    }
-  }
-
-  class Suite extends Job {
-    /** @type {Job[]} */
+  class Suite {
+    /** @type {(Suite | Test)[]} */
     jobs = [];
-    status = "ready";
     path = [];
     suitePath = [];
     beforeFns = [];
@@ -324,7 +310,8 @@
      * @param {string[]} [tags]
      */
     constructor(parent, description, tags = []) {
-      super(parent, description);
+      this.parent = parent || null;
+      this.description = description;
       this.path = parent ? parent.path.concat(description) : [description];
       this.suitePath = parent ? parent.suitePath.concat(this) : [this];
       this.hash = generateHash(this.path);
@@ -332,7 +319,7 @@
     }
   }
 
-  class Test extends Job {
+  class Test {
     /** @type {number} */
     duration = null;
 
@@ -349,7 +336,8 @@
      * @param {string[]} [tags]
      */
     constructor(parent, description, runTest, tags = []) {
-      super(parent, description);
+      this.parent = parent || null;
+      this.description = description;
       this.run = runTest;
       const parts = (parent ? parent.path : []).concat(description);
       this.hash = generateHash(parts);
@@ -1154,6 +1142,8 @@
   // ---------------------------------------------------------------------------
 
   // capture location in case some testing code decides to mock it
+  // todo: move this in testui, instantiate the bus there, and give it to the
+  // test runner in its constructor
   const runner = new TestRunner();
 
   const location = window.location;
