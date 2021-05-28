@@ -449,494 +449,453 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Reporting
+  // gTest main UI
   // ---------------------------------------------------------------------------
 
-  class ReportingUI {
-    static html = /** html */ `
-      <div class="gtest-runner">
-        <div class="gtest-panel">
-          <div class="gtest-panel-top">
-            <span class="gtest-logo">gTest</span>
+  const html = /* html */ `
+    <div class="gtest-runner">
+      <div class="gtest-panel">
+        <div class="gtest-panel-top">
+          <span class="gtest-logo">gTest</span>
+        </div>
+        <div class="gtest-panel-main">
+          <button class="gtest-btn gtest-abort">Start</button>
+          <button class="gtest-btn gtest-run-failed" disabled="disabled"><a href="">Run failed</a></button>
+          <button class="gtest-btn gtest-run-all"><a href="">Run all</a></button>
+          <div class="gtest-checkbox">
+            <input type="checkbox" id="gtest-hidepassed">
+            <label for="gtest-hidepassed">Hide passed tests</label>
           </div>
-          <div class="gtest-panel-main">
-            <button class="gtest-btn gtest-abort">Start</button>
-            <button class="gtest-btn gtest-run-failed" disabled="disabled"><a href="">Run failed</a></button>
-            <button class="gtest-btn gtest-run-all"><a href="">Run all</a></button>
-            <div class="gtest-checkbox">
-              <input type="checkbox" id="gtest-hidepassed">
-              <label for="gtest-hidepassed">Hide passed tests</label>
-            </div>
-            <div class="gtest-checkbox">
-              <input type="checkbox" id="gtest-TestRunner.config.notrycatch">
-              <label for="gtest-TestRunner.config.notrycatch">No try/catch</label>
-            </div>
-            <div class="gtest-search">
-              <span>Filter: </span>
-              <input />
-              <button class="gtest-btn gtest-go" disabled="disabled">Go</button>
-            </div>
+          <div class="gtest-checkbox">
+            <input type="checkbox" id="gtest-TestRunner.config.notrycatch">
+            <label for="gtest-TestRunner.config.notrycatch">No try/catch</label>
           </div>
-          <div class="gtest-status">Ready
+          <div class="gtest-search">
+            <span>Filter: </span>
+            <input />
+            <button class="gtest-btn gtest-go" disabled="disabled">Go</button>
           </div>
         </div>
-        <div class="gtest-reporting"></div>
-      </div>`;
+        <div class="gtest-status">Ready
+        </div>
+      </div>
+      <div class="gtest-reporting"></div>
+    </div>`;
 
-    static style = /** css */ `
-      body {
-        margin: 0;
-      }
-
-      .gtest-runner {
-        font-family: sans-serif;
-        height: 100%;
-        display: grid;
-        grid-template-rows: 124px auto;
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        left: 0;
-        right: 0;
-      }
-
-      .gtest-panel {
-          background-color: #eeeeee;
-      }
-      .gtest-panel-top {
-        height: 45px;
-        padding-left: 8px;
-        padding-top: 4px;
-      }
-      .gtest-logo {
-        font-size: 30px;
-        font-weight: bold;
-        font-family: sans-serif;
-        color: #444444;
-        margin-left: 4px;
-      }
-
-      .gtest-btn {
-        height: 32px;
-        background-color:#768d87;
-        border-radius:4px;
-        border:1px solid #566963;
-        display:inline-block;
-        cursor:pointer;
-        color:#ffffff;
-        font-size:14px;
-        font-weight:bold;
-        padding:6px 12px;
-        text-decoration:none;
-        text-shadow:0px 1px 0px #2b665e;
-      }
-      .gtest-btn:hover {
-        background-color:#6c7c7c;
-      }
-      .gtest-btn:active {
-        position:relative;
-        top:1px;
-      }
-
-      .gtest-btn:disabled {
-        cursor: not-allowed;
-        opacity: 0.4;
-      }
-      
-      .gtest-run-all, .gtest-run-failed {
-        padding: 0;
-      }
-
-      .gtest-run-all a, .gtest-run-failed a {
-        padding: 0px 12px;
-        line-height: 30px;
-        display: inline-block;
-        text-decoration: none;
-        color: white;
-      }
-
-      .gtest-panel-main {
-        height: 45px;
-        line-height: 45px;
-        padding-left: 8px;
-      }
-
-      .gtest-checkbox {
-        display: inline-block;
-        font-size: 15px;
-      }
-
-      .gtest-status {
-        background-color: #D2E0E6;
-        height: 30px;
-        line-height: 30px;
-        font-size: 14px;
-        padding-left: 12px;
-      }
-
-      .gtest-circle {
-        display: inline-block;
-        height: 16px;
-        width: 16px;
-        border-radius: 8px;
-        position: relative;
-        top: 2px;
-      }
-
-      .gtest-darkred {
-        background-color: darkred;
-      }
-
-      .gtest-darkgreen {
-        background-color: darkgreen;
-      }
-
-      .gtest-text-darkred {
-        color: darkred;
-      }
-
-      .gtest-text-darkgreen {
-        color: darkgreen;
-      }
-
-      .gtest-text-red {
-        color: #EE5757;
-      }
-
-      .gtest-text-green {
-        color: green;
-      }
-
-      .gtest-search {
-        float: right;
-        margin: 0 10px;
-        color: #333333;
-      }
-
-      .gtest-search input {
-        height: 22px;
-        width: 400px;
-      }
-
-      .gtest-tag {
-        margin: 5px;
-        background: darkcyan;
-        color: white;
-        padding: 2px 5px;
-        font-size: 13px;
-        font-weight: bold;
-        border-radius: 7px;
-      }
-
-      .gtest-reporting {
-        padding-left: 20px;
-        font-size: 14px;
-        overflow: auto;
-      }
-
-      .gtest-reporting.gtest-hidepassed .gtest-result:not(.gtest-fail) {
-        display: none;
-      }
-
-      .gtest-fixture {
-        position: absolute;
-        top: 124px;
-        left: 0;
-        right: 0;
-        bottom: 0;        
-      }
-
-      .gtest-result {
-        border-bottom: 1px solid lightgray;
-      }
-      .gtest-result-line {
-        margin: 5px;
-      }
-
-      .gtest-result-header {
-        padding: 4px 12px;
-        cursor: default;
-      }
-
-      .gtest-result-header a {
-        text-decoration: none;
-      }
-
-      .gtest-result-header .gtest-circle {
-        margin-right: 5px;
-      }
-      .gtest-result-header .gtest-open {
-        padding: 4px;
-        color: #C2CCD1;
-        padding-right: 50px;
-      }
-      
-      .gtest-result-header .gtest-open:hover {
-        font-weight: bold;
-        color: black;
-      }
-
-      .gtest-result-detail {
-        padding-left: 40px;
-      }
-
-      .gtest-info-line {
-        display: grid;
-        grid-template-columns: 80px auto;
-        column-gap: 10px;
-        margin: 4px;
-      }
-
-      .gtest-info-line-left > span {
-        font-weight: bold;
-        float: right;
-      }
-
-      .gtest-stack {
-        font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-        margin: 3px;
-        font-size: 12px;
-        line-height: 18px;  
-        color: #091124;
-      }
-
-      .gtest-fail {
-        background-color: #fff0f0;
-      }
-
-      .gtest-name {
-        color: #366097;
-        font-weight: 700;
-        cursor: pointer;
-        padding: 2px 4px;
-      }
-      .gtest-cell {
-        padding: 2px;
-        font-weight: bold;
-      }
-
-      .gtest-cell a {
-        color: #444444;
-      }
-
-      .gtest-cell a, .gtest-name {
-        user-select: text;
-      }
-
-      .gtest-duration {
-        float: right;
-        font-size: smaller;
-        color: gray;
-      }`;
-
-    suiteNumber = 0;
-    testNumber = 0;
-    failedTestNumber = 0;
-    doneTestNumber = 0;
-    tests = {};
-    testIndex = 1;
-    failedTests = [];
-    didShowDetail = false;
-    hidePassed = false;
-
-    /**
-     * @param {TestRunner} runner
-     * @param {{ hidePassed: boolean}} config
-     */
-    constructor(runner, config) {
-      this.runner = runner;
-      this.bus = runner.bus;
-      this.hidePassed = config.hidePassed;
-      this.bus.addEventListener("test-added", () => this.testNumber++);
-      this.bus.addEventListener("suite-added", () => this.suiteNumber++);
-      this.bus.addEventListener("after-test", (ev) => {
-        const test = ev.detail;
-        this.doneTestNumber++;
-        if (!test.pass) {
-          this.failedTestNumber++;
-          this.failedTests.push(test.hash);
-        }
-      });
+  const style = /* css */ `
+    body {
+      margin: 0;
     }
 
-    async mount() {
-      await domReady;
-      // initial rendering
-      const div = document.createElement("div");
-      div.innerHTML = ReportingUI.html;
-      document.body.prepend(div.firstElementChild);
+    .gtest-runner {
+      font-family: sans-serif;
+      height: 100%;
+      display: grid;
+      grid-template-rows: 124px auto;
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      right: 0;
+    }
 
-      const sheet = document.createElement("style");
-      sheet.innerHTML = ReportingUI.style;
-      document.head.appendChild(sheet);
+    .gtest-panel {
+        background-color: #eeeeee;
+    }
+    .gtest-panel-top {
+      height: 45px;
+      padding-left: 8px;
+      padding-top: 4px;
+    }
+    .gtest-logo {
+      font-size: 30px;
+      font-weight: bold;
+      font-family: sans-serif;
+      color: #444444;
+      margin-left: 4px;
+    }
 
-      // key dom elements
-      this.statusPanel = document.querySelector(".gtest-status");
-      this.abortBtn = document.querySelector(".gtest-abort");
-      this.runFailedBtn = document.querySelector(".gtest-run-failed");
-      this.reporting = document.querySelector(".gtest-reporting");
-      this.hidePassedCheckbox = document.getElementById("gtest-hidepassed");
-      this.notrycatchCheckbox = document.getElementById(
-        "gtest-TestRunner.config.notrycatch"
-      );
-      this.searchInput = document.querySelector(".gtest-search input");
-      this.searchButton = document.querySelector(".gtest-search button");
+    .gtest-btn {
+      height: 32px;
+      background-color:#768d87;
+      border-radius:4px;
+      border:1px solid #566963;
+      display:inline-block;
+      cursor:pointer;
+      color:#ffffff;
+      font-size:14px;
+      font-weight:bold;
+      padding:6px 12px;
+      text-decoration:none;
+      text-shadow:0px 1px 0px #2b665e;
+    }
+    .gtest-btn:hover {
+      background-color:#6c7c7c;
+    }
+    .gtest-btn:active {
+      position:relative;
+      top:1px;
+    }
 
-      if (this.hidePassed) {
-        this.hidePassedCheckbox.checked = true;
-        this.reporting.classList.add("gtest-hidepassed");
+    .gtest-btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.4;
+    }
+
+    .gtest-run-all, .gtest-run-failed {
+      padding: 0;
+    }
+
+    .gtest-run-all a, .gtest-run-failed a {
+      padding: 0px 12px;
+      line-height: 30px;
+      display: inline-block;
+      text-decoration: none;
+      color: white;
+    }
+
+    .gtest-panel-main {
+      height: 45px;
+      line-height: 45px;
+      padding-left: 8px;
+    }
+
+    .gtest-checkbox {
+      display: inline-block;
+      font-size: 15px;
+    }
+
+    .gtest-status {
+      background-color: #D2E0E6;
+      height: 30px;
+      line-height: 30px;
+      font-size: 14px;
+      padding-left: 12px;
+    }
+
+    .gtest-circle {
+      display: inline-block;
+      height: 16px;
+      width: 16px;
+      border-radius: 8px;
+      position: relative;
+      top: 2px;
+    }
+
+    .gtest-darkred {
+      background-color: darkred;
+    }
+
+    .gtest-darkgreen {
+      background-color: darkgreen;
+    }
+
+    .gtest-text-darkred {
+      color: darkred;
+    }
+
+    .gtest-text-darkgreen {
+      color: darkgreen;
+    }
+
+    .gtest-text-red {
+      color: #EE5757;
+    }
+
+    .gtest-text-green {
+      color: green;
+    }
+
+    .gtest-search {
+      float: right;
+      margin: 0 10px;
+      color: #333333;
+    }
+
+    .gtest-search input {
+      height: 22px;
+      width: 400px;
+    }
+
+    .gtest-tag {
+      margin: 5px;
+      background: darkcyan;
+      color: white;
+      padding: 2px 5px;
+      font-size: 13px;
+      font-weight: bold;
+      border-radius: 7px;
+    }
+
+    .gtest-reporting {
+      padding-left: 20px;
+      font-size: 14px;
+      overflow: auto;
+    }
+
+    .gtest-reporting.gtest-hidepassed .gtest-result:not(.gtest-fail) {
+      display: none;
+    }
+
+    .gtest-fixture {
+      position: absolute;
+      top: 124px;
+      left: 0;
+      right: 0;
+      bottom: 0;        
+    }
+
+    .gtest-result {
+      border-bottom: 1px solid lightgray;
+    }
+    .gtest-result-line {
+      margin: 5px;
+    }
+
+    .gtest-result-header {
+      padding: 4px 12px;
+      cursor: default;
+    }
+
+    .gtest-result-header a {
+      text-decoration: none;
+    }
+
+    .gtest-result-header .gtest-circle {
+      margin-right: 5px;
+    }
+    .gtest-result-header .gtest-open {
+      padding: 4px;
+      color: #C2CCD1;
+      padding-right: 50px;
+    }
+
+    .gtest-result-header .gtest-open:hover {
+      font-weight: bold;
+      color: black;
+    }
+
+    .gtest-result-detail {
+      padding-left: 40px;
+    }
+
+    .gtest-info-line {
+      display: grid;
+      grid-template-columns: 80px auto;
+      column-gap: 10px;
+      margin: 4px;
+    }
+
+    .gtest-info-line-left > span {
+      font-weight: bold;
+      float: right;
+    }
+
+    .gtest-stack {
+      font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      margin: 3px;
+      font-size: 12px;
+      line-height: 18px;  
+      color: #091124;
+    }
+
+    .gtest-fail {
+      background-color: #fff0f0;
+    }
+
+    .gtest-name {
+      color: #366097;
+      font-weight: 700;
+      cursor: pointer;
+      padding: 2px 4px;
+    }
+    .gtest-cell {
+      padding: 2px;
+      font-weight: bold;
+    }
+
+    .gtest-cell a {
+      color: #444444;
+    }
+
+    .gtest-cell a, .gtest-name {
+      user-select: text;
+    }
+
+    .gtest-duration {
+      float: right;
+      font-size: smaller;
+      color: gray;
+    }`;
+
+  async function setupGTest(runner) {
+    // -------------------------------------------------------------------------
+    // main setup code
+    // -------------------------------------------------------------------------
+
+    // capture location in case some testing code decides to mock it
+    const location = window.location;
+    const bus = runner.bus;
+
+    const queryParams = new URLSearchParams(location.search);
+    TestRunner.config.notrycatch = queryParams.has("notrycatch");
+
+    const tag = queryParams.get("tag");
+    if (tag) {
+      runner.addFilter({ tag });
+    }
+    const filter = queryParams.get("filter");
+    if (filter) {
+      runner.addFilter({ text: filter });
+    }
+
+    const testId = queryParams.get("testId");
+    const suiteId = queryParams.get("suiteId");
+
+    const previousFails = sessionStorage.getItem("gtest-failed-tests");
+    if (previousFails) {
+      sessionStorage.removeItem("gtest-failed-tests");
+      const tests = previousFails.split(",");
+      for (let fail of tests) {
+        runner.addFilter({ hash: fail });
       }
-      if (TestRunner.config.notrycatch) {
-        this.notrycatchCheckbox.checked = true;
+    } else if (testId) {
+      runner.addFilter({ hash: testId });
+    } else if (suiteId) {
+      runner.addFilter({ hash: suiteId });
+    }
+
+    // -------------------------------------------------------------------------
+    // internal state stuff
+    // -------------------------------------------------------------------------
+
+    let suiteNumber = 0;
+    let testNumber = 0;
+    let failedTestNumber = 0;
+    let doneTestNumber = 0;
+    let tests = {};
+    let testIndex = 1;
+    let failedTests = [];
+    let didShowDetail = false;
+    let hidePassed = queryParams.has("hidepassed");
+
+    bus.addEventListener("test-added", () => testNumber++);
+    bus.addEventListener("suite-added", () => suiteNumber++);
+    bus.addEventListener("after-test", (ev) => {
+      const test = ev.detail;
+      doneTestNumber++;
+      if (!test.pass) {
+        failedTestNumber++;
+        failedTests.push(test.hash);
       }
+    });
 
-      const runLink = document.querySelector(".gtest-run-all a");
-      const runFailedLink = document.querySelector(".gtest-run-failed a");
-      const search = location.search;
-      const params = new URLSearchParams(search);
-      params.delete("testId");
-      params.delete("suiteId");
-      params.delete("tag");
-      params.delete("filter");
-      const href = getUrlWithParams(params);
-      runLink.setAttribute("href", href);
-      runFailedLink.setAttribute("href", location.href);
-      runFailedLink.addEventListener("click", () => {
-        sessionStorage.setItem(
-          "gtest-failed-tests",
-          this.failedTests.toString()
-        );
-      });
-      document
-        .querySelector(".gtest-runner")
-        .addEventListener("click", (ev) => {
-          if (ev.target.matches("a")) {
-            if (location.search === search) {
-              location.reload();
-            }
-          }
-        });
+    await domReady;
+    if (TestRunner.config.autostart) {
+      runner.start();
+    }
 
-      // ui event handlers
+    // -------------------------------------------------------------------------
+    // main rendering
+    // -------------------------------------------------------------------------
 
-      this.abortBtn.addEventListener("click", () => {
-        if (this.runner.status === "ready") {
-          this.runner.start();
-        } else {
-          this.runner.stop();
-        }
-      });
+    const div = document.createElement("div");
+    div.innerHTML = html;
+    document.body.prepend(div.firstElementChild);
+    const sheet = document.createElement("style");
+    sheet.innerHTML = style;
+    document.head.appendChild(sheet);
 
-      // business event handlers
-      this.bus.addEventListener("before-all", () => {
-        this.abortBtn.textContent = "Abort";
-      });
-
-      this.bus.addEventListener("before-test", (ev) => {
-        const { description, parent } = ev.detail;
-        const fullPath = (parent ? parent.path : [])
-          .concat(description)
-          .join(" > ");
-        this.setStatusContent(`Running: ${fullPath}`);
-      });
-
-      this.bus.addEventListener("after-test", (ev) => {
-        this.addTestResult(ev.detail);
-      });
-
-      this.bus.addEventListener("after-all", () => {
-        this.abortBtn.setAttribute("disabled", "disabled");
-        if (this.failedTests.length) {
-          this.runFailedBtn.removeAttribute("disabled");
-        }
-        const statusCls =
-          this.failedTestNumber === 0 ? "gtest-darkgreen" : "gtest-darkred";
-        const msg = `${this.doneTestNumber} test(s) completed`;
-        const hasFilter = this.runner.hasFilter;
-        const suiteInfo = hasFilter ? "" : ` in ${this.suiteNumber} suites`;
-
-        const errors = this.failedTestNumber
-          ? `, with ${this.failedTestNumber} failed`
-          : "";
-        const status = `<span class="gtest-circle ${statusCls}"></span> ${msg}${suiteInfo}${errors}`;
-        this.setStatusContent(status);
-        if (this.failedTestNumber > 0) {
-          document.title = `✖ ${document.title}`;
-        }
-      });
-
-      this.searchInput.value = runner.textFilter;
-      this.searchInput.addEventListener("input", (ev) => {
-        const str = ev.target.value.trim();
-        if (str !== runner.textFilter) {
-          this.searchButton.removeAttribute("disabled");
-        } else {
-          this.searchButton.setAttribute("disabled", "disabled");
-        }
-      });
-
-      const searchInput = this.searchInput;
-      this.searchInput.addEventListener("keyup", (ev) => {
-        if (ev.keyCode === 13) {
-          activateFilter();
-        }
-      });
-      this.searchButton.addEventListener("click", activateFilter);
-
-      function activateFilter() {
-        const filter = searchInput.value.trim();
-        const params = new URLSearchParams(location.search);
-        params.set("filter", filter);
-        location.href = getUrlWithParams(params);
-      }
-
-      this.reporting.addEventListener("click", (ev) => {
-        const index = ev.target?.dataset?.index;
-        if (index) {
-          const resultDiv = ev.target.closest(".gtest-result");
-          this.toggleDetailedTestResult(index, resultDiv);
-        }
-      });
-
-      this.hidePassedCheckbox.addEventListener("change", () => {
-        this.toggleHidePassedTests();
-      });
-      this.notrycatchCheckbox.addEventListener("change", () => {
-        this.toggleNoTryCatch();
-      });
-      if (TestRunner.config.autostart) {
+    // -------------------------------------------------------------------------
+    // abort button
+    // -------------------------------------------------------------------------
+    const abortBtn = document.querySelector(".gtest-abort");
+    abortBtn.addEventListener("click", () => {
+      if (runner.status === "ready") {
         runner.start();
+      } else {
+        runner.stop();
       }
-      this.reporting.addEventListener("click", (ev) => {
-        if (ev.target.tagName === "A") {
-          const selection = window.getSelection();
-          if (
-            ev.target.contains(selection.focusNode) &&
-            ev.target.contains(selection.anchorNode) &&
-            !selection.isCollapsed
-          ) {
-            ev.preventDefault();
-            ev.stopPropagation();
-          }
-        }
-      });
+    });
+
+    bus.addEventListener("before-all", () => {
+      abortBtn.textContent = "Abort";
+    });
+
+    bus.addEventListener("after-all", () => {
+      abortBtn.setAttribute("disabled", "disabled");
+    });
+
+    // -------------------------------------------------------------------------
+    // run failed button
+    // -------------------------------------------------------------------------
+    const runFailedBtn = document.querySelector(".gtest-run-failed");
+    const runFailedLink = document.querySelector(".gtest-run-failed a");
+    runFailedLink.setAttribute("href", location.href);
+    runFailedLink.addEventListener("click", () => {
+      sessionStorage.setItem("gtest-failed-tests", failedTests.toString());
+    });
+
+    bus.addEventListener("after-all", () => {
+      if (failedTests.length) {
+        runFailedBtn.removeAttribute("disabled");
+      }
+    });
+
+    // -------------------------------------------------------------------------
+    // run all button
+    // -------------------------------------------------------------------------
+    const runLink = document.querySelector(".gtest-run-all a");
+    const search = location.search;
+    const params = new URLSearchParams(search);
+    params.delete("testId");
+    params.delete("suiteId");
+    params.delete("tag");
+    params.delete("filter");
+    const href = getUrlWithParams(params);
+    runLink.setAttribute("href", href);
+
+    // -------------------------------------------------------------------------
+    // hide passed checkbox
+    // -------------------------------------------------------------------------
+    const hidePassedCheckbox = document.getElementById("gtest-hidepassed");
+    const reporting = document.querySelector(".gtest-reporting");
+    if (hidePassed) {
+      hidePassedCheckbox.checked = true;
+      reporting.classList.add("gtest-hidepassed");
     }
 
-    toggleHidePassedTests() {
-      this.hidePassed = !this.hidePassed;
+    hidePassedCheckbox.addEventListener("change", toggleHidePassedTests);
+
+    function toggleHidePassedTests() {
+      hidePassed = !hidePassed;
       const params = new URLSearchParams(location.search);
-      if (this.hidePassed) {
-        this.reporting.classList.add("gtest-hidepassed");
+      if (hidePassed) {
+        reporting.classList.add("gtest-hidepassed");
         params.set("hidepassed", "1");
       } else {
-        this.reporting.classList.remove("gtest-hidepassed");
+        reporting.classList.remove("gtest-hidepassed");
         params.delete("hidepassed");
       }
       const newurl = getUrlWithParams(params);
       history.replaceState({ path: newurl }, "", newurl);
     }
 
-    toggleNoTryCatch() {
+    // -------------------------------------------------------------------------
+    // no try/catch checkbox
+    // -------------------------------------------------------------------------
+    const notrycatchCheckbox = document.getElementById(
+      "gtest-TestRunner.config.notrycatch"
+    );
+    if (TestRunner.config.notrycatch) {
+      notrycatchCheckbox.checked = true;
+    }
+
+    notrycatchCheckbox.addEventListener("change", () => {
+      toggleNoTryCatch();
+    });
+
+    function toggleNoTryCatch() {
       const params = new URLSearchParams(location.search);
       if (!TestRunner.config.notrycatch) {
         params.set("notrycatch", "1");
@@ -948,21 +907,88 @@
       location.reload();
     }
 
-    /**
-     * @param {string} content
-     */
-    setStatusContent(content) {
-      this.statusPanel.innerHTML = content;
-      this.statusMsg = content;
+    // -------------------------------------------------------------------------
+    // status panel
+    // -------------------------------------------------------------------------
+    const statusPanel = document.querySelector(".gtest-status");
+    function setStatusContent(content) {
+      statusPanel.innerHTML = content;
     }
+
+    bus.addEventListener("before-test", (ev) => {
+      const { description, parent } = ev.detail;
+      const fullPath = (parent ? parent.path : [])
+        .concat(description)
+        .join(" > ");
+      setStatusContent(`Running: ${fullPath}`);
+    });
+
+    bus.addEventListener("after-all", () => {
+      const statusCls =
+        failedTestNumber === 0 ? "gtest-darkgreen" : "gtest-darkred";
+      const msg = `${doneTestNumber} test(s) completed`;
+      const hasFilter = runner.hasFilter;
+      const suiteInfo = hasFilter ? "" : ` in ${suiteNumber} suites`;
+
+      const errors = failedTestNumber
+        ? `, with ${failedTestNumber} failed`
+        : "";
+      const status = `<span class="gtest-circle ${statusCls}"></span> ${msg}${suiteInfo}${errors}`;
+      setStatusContent(status);
+    });
+
+    // -------------------------------------------------------------------------
+    // search input
+    // -------------------------------------------------------------------------
+    const searchInput = document.querySelector(".gtest-search input");
+    const searchButton = document.querySelector(".gtest-search button");
+
+    searchInput.value = runner.textFilter;
+    searchInput.addEventListener("input", (ev) => {
+      const str = ev.target.value.trim();
+      if (str !== runner.textFilter) {
+        searchButton.removeAttribute("disabled");
+      } else {
+        searchButton.setAttribute("disabled", "disabled");
+      }
+    });
+
+    searchInput.addEventListener("keyup", (ev) => {
+      if (ev.keyCode === 13) {
+        activateFilter();
+      }
+    });
+    searchButton.addEventListener("click", activateFilter);
+
+    function activateFilter() {
+      const filter = searchInput.value.trim();
+      const params = new URLSearchParams(location.search);
+      params.set("filter", filter);
+      location.href = getUrlWithParams(params);
+    }
+
+    // -------------------------------------------------------------------------
+    // test result reporting
+    // -------------------------------------------------------------------------
+    bus.addEventListener("after-test", (ev) => {
+      addTestResult(ev.detail);
+    });
+
+    reporting.addEventListener("click", (ev) => {
+      const index = ev.target?.dataset?.index;
+      if (index) {
+        const resultDiv = ev.target.closest(".gtest-result");
+        toggleDetailedTestResult(index, resultDiv);
+      }
+    });
 
     /**
      * @param {Test} test
      */
-    addTestResult(test) {
+    function addTestResult(test) {
       const suite = test.parent;
-      const index = this.testIndex++;
-      this.tests[index] = test;
+      const index = testIndex++;
+      tests[index] = test;
       // header
       const header = document.createElement("div");
       header.classList.add("gtest-result-header");
@@ -1012,22 +1038,22 @@
       if (!test.pass) {
         div.classList.add("gtest-fail");
       }
-      this.reporting.appendChild(div);
+      reporting.appendChild(div);
 
       if (!test.pass) {
         const showDetailConfig = TestRunner.config.showDetail;
         const shouldShowDetail =
           showDetailConfig === "failed" ||
-          (showDetailConfig === "first-fail" && !this.didShowDetail);
+          (showDetailConfig === "first-fail" && !didShowDetail);
         if (shouldShowDetail) {
-          this.toggleDetailedTestResult(index, div);
-          this.didShowDetail = true;
+          toggleDetailedTestResult(index, div);
+          didShowDetail = true;
         }
       }
     }
 
-    toggleDetailedTestResult(testIndex, resultDiv) {
-      const test = this.tests[testIndex];
+    function toggleDetailedTestResult(testIndex, resultDiv) {
+      const test = tests[testIndex];
       const detailDiv = resultDiv.querySelector(".gtest-result-detail");
       if (detailDiv) {
         detailDiv.remove();
@@ -1036,7 +1062,7 @@
         results.classList.add("gtest-result-detail");
         const assertions = test.assertions;
         for (let i = 0; i < assertions.length; i++) {
-          this.addAssertionInfo(results, i, assertions[i]);
+          addAssertionInfo(results, i, assertions[i]);
         }
         if (test.error) {
           const div = makeEl("div", [
@@ -1045,7 +1071,7 @@
           ]);
           div.innerText = `Died on test #${testIndex}`;
           results.appendChild(div);
-          this.addInfoTable(results, [
+          addInfoTable(results, [
             [
               `<span class="gtest-text-darkred">Source:</span>`,
               `<pre class="gtest-stack">${test.error.stack}</pre>`,
@@ -1056,7 +1082,7 @@
       }
     }
 
-    addAssertionInfo(parentEl, index, assertion) {
+    function addAssertionInfo(parentEl, index, assertion) {
       const div = document.createElement("div");
       div.classList.add("gtest-result-line");
       const lineCls = assertion.pass
@@ -1076,7 +1102,7 @@
           case "equal":
           case "ok":
           case "verifysteps":
-            this.addInfoTable(parentEl, [
+            addInfoTable(parentEl, [
               [
                 `<span class="gtest-text-green">Expected:</span>`,
                 `<span>${assertion.expected}</span>`,
@@ -1093,7 +1119,7 @@
             break;
           case "step":
           case "expect":
-            this.addInfoTable(parentEl, [
+            addInfoTable(parentEl, [
               [
                 `<span class="gtest-text-darkred">Source:</span>`,
                 `<pre class="gtest-stack">${stack}</pre>`,
@@ -1103,7 +1129,7 @@
       }
     }
 
-    addInfoTable(parentEl, lines) {
+    function addInfoTable(parentEl, lines) {
       for (let [left, right] of lines) {
         const line = makeEl("div", ["gtest-info-line"]);
         const lDiv = makeEl("div", ["gtest-info-line-left"]);
@@ -1115,188 +1141,181 @@
         parentEl.appendChild(line);
       }
     }
-  }
 
-  function makeEl(tag, classes) {
-    const elem = document.createElement(tag);
-    for (let cl of classes) {
-      elem.classList.add(cl);
+    function makeEl(tag, classes) {
+      const elem = document.createElement(tag);
+      for (let cl of classes) {
+        elem.classList.add(cl);
+      }
+      return elem;
     }
-    return elem;
+
+    // -------------------------------------------------------------------------
+    // misc ui polish
+    // -------------------------------------------------------------------------
+
+    // display a X in title if test run failed
+    bus.addEventListener("after-all", () => {
+      if (failedTestNumber > 0) {
+        document.title = `✖ ${document.title}`;
+      }
+    });
+
+    // force reload on links even when location did not change
+    document.querySelector(".gtest-runner").addEventListener("click", (ev) => {
+      if (ev.target.matches("a")) {
+        if (location.search === search) {
+          location.reload();
+        }
+      }
+    });
+
+    // prevent navigation on a link when there is some active selection
+    reporting.addEventListener("click", (ev) => {
+      if (ev.target.tagName === "A") {
+        const selection = window.getSelection();
+        if (
+          ev.target.contains(selection.focusNode) &&
+          ev.target.contains(selection.anchorNode) &&
+          !selection.isCollapsed
+        ) {
+          ev.preventDefault();
+          ev.stopPropagation();
+        }
+      }
+    });
   }
 
-  // ---------------------------------------------------------------------------
-  // Fixture system
-  // ---------------------------------------------------------------------------
+  function makeAPI(runner) {
+    function getFixture() {
+      const div = document.createElement("div");
+      div.classList.add("gtest-fixture");
+      document.body.appendChild(div);
+      afterTest(() => div.remove());
+      return div;
+    }
 
-  function getFixture() {
-    const div = document.createElement("div");
-    div.classList.add("gtest-fixture");
-    document.body.appendChild(div);
-    afterTest(() => div.remove());
-    return div;
+    function beforeSuite(callback) {
+      if (!runner.current) {
+        throw new Error(
+          `"beforeSuite" should only be called inside a suite definition`
+        );
+      }
+      runner.current.beforeFns.push(callback);
+    }
+
+    function beforeEach(callback) {
+      if (!runner.current) {
+        throw new Error(
+          `"beforeEach" should only be called inside a suite definition`
+        );
+      }
+      runner.current.beforeEachFns.push(callback);
+    }
+
+    const testCleanupFns = [];
+
+    runner.bus.addEventListener("after-test", () => {
+      while (testCleanupFns.length) {
+        const fn = testCleanupFns.pop();
+        fn();
+      }
+    });
+
+    function afterTest(callback) {
+      testCleanupFns.push(callback);
+    }
+
+    function afterSuite(callback) {
+      if (!runner.current) {
+        throw new Error(
+          `"afterSuite" should only be called inside a suite definition`
+        );
+      }
+      runner.current.afterFns.push(callback);
+    }
+
+    /**
+     * @param {any} description
+     * @param {{ (): void; (): void; }} [cb]
+     */
+    function suite(description, options, cb) {
+      if (typeof options === "string") {
+        // nested suite definition
+        let nestedArgs = Array.from(arguments).slice(1);
+        suite(description, () => suite(...nestedArgs));
+      } else {
+        if (!cb) {
+          cb = options;
+          options = {};
+        }
+        runner.addSuite(description, cb, options);
+      }
+    }
+
+    suite.only = function restrict(description, options, cb) {
+      if (typeof cb === "string") {
+        let nestedArgs = Array.from(arguments).slice(1);
+        suite(description, options, () => suite.only(...nestedArgs));
+      } else {
+        if (!cb) {
+          cb = options;
+          options = {};
+        }
+        runner.addSuite(description, cb, options);
+      }
+    };
+
+    /**
+     * @param {string} description
+     * @param {(assert: Assert) => void | Promise<void>} runTest
+     */
+    function test(description, options, runTest) {
+      if (!runTest) {
+        runTest = options;
+        options = {};
+      }
+      runner.addTest(description, runTest, options);
+    }
+
+    test.only = function restrict(description, options, runTest) {
+      if (!runTest) {
+        runTest = options;
+        options = {};
+      }
+      options.only = true;
+      test(description, options, runTest);
+    };
+
+    async function start() {
+      runner.start();
+    }
+    return {
+      suite,
+      test,
+      start,
+      getFixture,
+      beforeSuite,
+      afterSuite,
+      beforeEach,
+      afterTest,
+    };
   }
 
-  // ---------------------------------------------------------------------------
-  // Setup
-  // ---------------------------------------------------------------------------
-
-  // capture location in case some testing code decides to mock it
-  // todo: move this in testui, instantiate the bus there, and give it to the
-  // test runner in its constructor
+  // setup
   const runner = new TestRunner();
-
-  const location = window.location;
-  const queryParams = new URLSearchParams(location.search);
-  TestRunner.config.notrycatch = queryParams.has("notrycatch");
-
-  const tag = queryParams.get("tag");
-  if (tag) {
-    runner.addFilter({ tag });
-  }
-  const filter = queryParams.get("filter");
-  if (filter) {
-    runner.addFilter({ text: filter });
-  }
-
-  const testId = queryParams.get("testId");
-  const suiteId = queryParams.get("suiteId");
-
-  const failedTests = sessionStorage.getItem("gtest-failed-tests");
-  if (failedTests) {
-    sessionStorage.removeItem("gtest-failed-tests");
-    const tests = failedTests.split(",");
-    for (let fail of tests) {
-      runner.addFilter({ hash: fail });
-    }
-  } else if (testId) {
-    runner.addFilter({ hash: testId });
-  } else if (suiteId) {
-    runner.addFilter({ hash: suiteId });
-  }
-  const ui = new ReportingUI(runner, {
-    hidePassed: queryParams.has("hidepassed"),
-  });
-  ui.mount();
-
-  // ---------------------------------------------------------------------------
-  // setup/cleanup system
-  // ---------------------------------------------------------------------------
-
-  function beforeSuite(callback) {
-    if (!runner.current) {
-      throw new Error(
-        `"beforeSuite" should only be called inside a suite definition`
-      );
-    }
-    runner.current.beforeFns.push(callback);
-  }
-
-  function beforeEach(callback) {
-    if (!runner.current) {
-      throw new Error(
-        `"beforeEach" should only be called inside a suite definition`
-      );
-    }
-    runner.current.beforeEachFns.push(callback);
-  }
-
-  const testCleanupFns = [];
-
-  runner.bus.addEventListener("after-test", () => {
-    while (testCleanupFns.length) {
-      const fn = testCleanupFns.pop();
-      fn();
-    }
-  });
-
-  function afterTest(callback) {
-    testCleanupFns.push(callback);
-  }
-
-  function afterSuite(callback) {
-    if (!runner.current) {
-      throw new Error(
-        `"afterSuite" should only be called inside a suite definition`
-      );
-    }
-    runner.current.afterFns.push(callback);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Exported values
-  // ---------------------------------------------------------------------------
-
-  /**
-   * @param {any} description
-   * @param {{ (): void; (): void; }} [cb]
-   */
-  function suite(description, options, cb) {
-    if (typeof options === "string") {
-      // nested suite definition
-      let nestedArgs = Array.from(arguments).slice(1);
-      suite(description, () => suite(...nestedArgs));
-    } else {
-      if (!cb) {
-        cb = options;
-        options = {};
-      }
-      runner.addSuite(description, cb, options);
-    }
-  }
-
-  suite.only = function restrict(description, options, cb) {
-    if (typeof cb === "string") {
-      let nestedArgs = Array.from(arguments).slice(1);
-      suite(description, options, () => suite.only(...nestedArgs));
-    } else {
-      if (!cb) {
-        cb = options;
-        options = {};
-      }
-      runner.addSuite(description, cb, options);
-    }
-  };
-
-  /**
-   * @param {string} description
-   * @param {(assert: Assert) => void | Promise<void>} runTest
-   */
-  function test(description, options, runTest) {
-    if (!runTest) {
-      runTest = options;
-      options = {};
-    }
-    runner.addTest(description, runTest, options);
-  }
-
-  test.only = function restrict(description, options, runTest) {
-    if (!runTest) {
-      runTest = options;
-      options = {};
-    }
-    options.only = true;
-    test(description, options, runTest);
-  };
-
-  async function start() {
-    runner.start();
-  }
+  setupGTest(runner);
+  const exportedAPI = makeAPI(runner);
 
   window.gTest = {
     __debug__: {
       runner,
-      ui,
       TestRunner,
     },
+    __info__: {
+      version: "0.1",
+    },
     config: TestRunner.config,
-    suite,
-    test,
-    start,
-    getFixture,
-    beforeSuite,
-    beforeEach,
-    afterTest,
-    afterSuite,
+    ...exportedAPI,
   };
 })();
