@@ -1,5 +1,14 @@
 (function gTestRunner() {
   // ---------------------------------------------------------------------------
+  // Capturing some browser methods
+  // ---------------------------------------------------------------------------
+
+  // in case some testing code decides to mock them
+  const location = window.location;
+  const setTimeout = window.setTimeout;
+  const clearTimeout = window.clearTimeout;
+
+  // ---------------------------------------------------------------------------
   // Utility, helpers...
   // ---------------------------------------------------------------------------
 
@@ -38,13 +47,28 @@
   }
 
   /**
-   *
    * @param {URLSearchParams} params
    * @returns {string}
    */
   function getUrlWithParams(params) {
     const query = params.toString();
     return `${location.pathname}${query ? "?" + query : ""}${location.hash}`;
+  }
+
+  /**
+   * @param {URLSearchParams} params
+   */
+  function toggleMultiParam(params, active, key, value) {
+    const values = params.getAll(key);
+    params.delete(key);
+    for (let val of values) {
+      if (val !== value) {
+        params.append(key, val);
+      }
+    }
+    if (active) {
+      params.append(key, value);
+    }
   }
 
   class Bus extends EventTarget {
@@ -61,6 +85,78 @@
     const div = document.createElement("div");
     div.innerText = str;
     return div.innerHTML;
+  }
+
+  function debounce(func, wait, immediate = false) {
+    let timeout;
+    return function () {
+      const context = this;
+      const args = arguments;
+      function later() {
+        if (!immediate) {
+          func.apply(context, args);
+        }
+      }
+      const callNow = immediate && !timeout;
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+      if (callNow) {
+        func.apply(context, args);
+      }
+    };
+  }
+
+  /**
+   * This private function computes a score that represent the fact that the
+   * string contains the pattern, or not
+   *
+   * - If the score is 0, the string does not contain the letters of the pattern in
+   *   the correct order.
+   * - if the score is > 0, it actually contains the letters.
+   *
+   * Better matches will get a higher score: consecutive letters are better,
+   * and a match closer to the beginning of the string is also scored higher.
+   */
+  function match(pattern, str) {
+    let totalScore = 0;
+    let currentScore = 0;
+    let len = str.length;
+    let patternIndex = 0;
+
+    pattern = pattern.toLowerCase();
+    str = str.toLowerCase();
+
+    for (let i = 0; i < len; i++) {
+      if (str[i] === pattern[patternIndex]) {
+        patternIndex++;
+        currentScore += 100 + currentScore - i / 200;
+      } else {
+        currentScore = 0;
+      }
+      totalScore = totalScore + currentScore;
+    }
+
+    return patternIndex === pattern.length ? totalScore : 0;
+  }
+
+  /**
+   * Return a list of things that matches a pattern, ordered by their 'score' (
+   * higher score first). An higher score means that the match is better. For
+   * example, consecutive letters are considered a better match.
+   */
+  function fuzzyLookup(pattern, list, fn) {
+    const results = [];
+    list.forEach((data) => {
+      const score = match(pattern, fn(data));
+      if (score > 0) {
+        results.push({ score, elem: data });
+      }
+    });
+
+    // we want better matches first
+    results.sort((a, b) => b.score - a.score);
+
+    return results.map((r) => r.elem);
   }
 
   // ---------------------------------------------------------------------------
@@ -101,6 +197,10 @@
     tagSet = new Set();
     textFilter = "";
 
+    tests = [];
+    suites = [];
+    tags = new Set();
+
     addFilter(filter = {}) {
       this.hasFilter = true;
       if (filter.hash) {
@@ -127,6 +227,10 @@
       if (options.only) {
         this.addFilter({ hash: test.hash });
       }
+      this.tests.push(test);
+      if (options.tags) {
+        options.tags.forEach((t) => this.tags.add(t));
+      }
       this.bus.trigger("test-added", test);
     }
 
@@ -150,6 +254,8 @@
         result = suiteFn();
       } finally {
         this.suiteStack.pop();
+        this.suites.push(suite);
+        testTags.forEach((t) => this.tags.add(t));
         this.bus.trigger("suite-added", suite);
       }
       if (result !== undefined) {
@@ -191,13 +297,9 @@
 
       const filterText = escapeHTML(this.textFilter);
       if (filterText) {
-        jobs = getValidJobs(jobs, (job) => {
-          const txt =
-            job instanceof Suite
-              ? job.path.join(" > ")
-              : job.parent.path.concat(job.description).join(" > ");
-          return txt.includes(filterText);
-        });
+        jobs = getValidJobs(jobs, (job) =>
+          job.fullDescription.includes(filterText)
+        );
       }
       return jobs;
     }
@@ -317,6 +419,7 @@
       this.path = parent
         ? parent.path.concat(this.description)
         : [this.description];
+      this.fullDescription = this.path.join(" > ");
       this.suitePath = parent ? parent.suitePath.concat(this) : [this];
       this.hash = generateHash(this.path);
       this.tags = tags;
@@ -344,6 +447,7 @@
       this.description = escapeHTML(description);
       this.run = runTest;
       const parts = (parent ? parent.path : []).concat(this.description);
+      this.fullDescription = parts.join(" > ");
       this.hash = generateHash(parts);
       this.tags = tags;
     }
@@ -475,8 +579,7 @@
             <label for="gtest-TestRunner.config.notrycatch">No try/catch</label>
           </div>
           <div class="gtest-search">
-            <span>Filter: </span>
-            <input />
+            <input placeholder="Filter suites, tests or tags" />
             <button class="gtest-btn gtest-go" disabled="disabled">Go</button>
           </div>
         </div>
@@ -616,9 +719,37 @@
       color: #333333;
     }
 
-    .gtest-search input {
-      height: 22px;
-      width: 400px;
+    .gtest-search > input {
+      height: 24px;
+      width: 450px;
+      border: 1px solid gray;
+    }
+
+    .gtest-dropdown {
+      position: absolute;
+      background-color: white;
+      border: 1px solid #9e9e9e;
+      width: 454px;
+      line-height: 28px;
+      font-size: 14px;
+    }
+
+    .gtest-dropdown-category {
+      font-weight: bold;
+      color: #333333;
+      padding: 0 5px;
+    }
+
+    .gtest-dropdown-line {
+      padding: 0 10px;
+    }
+
+    .gtest-dropdown-line:hover {
+      background-color: #f2f2f2;
+    }
+
+    .gtest-dropdown-line label {
+      padding: 5px;
     }
 
     .gtest-tag {
@@ -737,8 +868,6 @@
     // main setup code
     // -------------------------------------------------------------------------
 
-    // capture location in case some testing code decides to mock it
-    const location = window.location;
     const bus = runner.bus;
 
     const queryParams = new URLSearchParams(location.search);
@@ -753,8 +882,8 @@
       runner.addFilter({ text: filter });
     }
 
-    const testId = queryParams.get("testId");
-    const suiteId = queryParams.get("suiteId");
+    const hasTestId = queryParams.has("testId");
+    const hasSuiteId = queryParams.has("suiteId");
 
     const previousFails = sessionStorage.getItem("gtest-failed-tests");
     if (previousFails) {
@@ -763,10 +892,14 @@
       for (let fail of tests) {
         runner.addFilter({ hash: fail });
       }
-    } else if (testId) {
-      runner.addFilter({ hash: testId });
-    } else if (suiteId) {
-      runner.addFilter({ hash: suiteId });
+    } else if (hasTestId) {
+      for (let hash of queryParams.getAll("testId")) {
+        runner.addFilter({ hash });
+      }
+    } else if (hasSuiteId) {
+      for (let hash of queryParams.getAll("suiteId")) {
+        runner.addFilter({ hash });
+      }
     }
 
     // -------------------------------------------------------------------------
@@ -946,19 +1079,24 @@
     });
 
     // -------------------------------------------------------------------------
-    // search input
+    // search input/dropdown
     // -------------------------------------------------------------------------
-    const searchInput = document.querySelector(".gtest-search input");
-    const searchButton = document.querySelector(".gtest-search button");
+    const searchDiv = document.querySelector(".gtest-search");
+    const searchInput = searchDiv.querySelector(".gtest-search input");
+    const searchButton = searchDiv.querySelector(".gtest-search button");
+    let searchStr = "";
+    let hasJustSelected = false;
 
     searchInput.value = runner.textFilter;
     searchInput.addEventListener("input", (ev) => {
-      const str = ev.target.value.trim();
-      if (str !== runner.textFilter) {
+      searchStr = ev.target.value.trim();
+      if (searchStr !== runner.textFilter) {
         searchButton.removeAttribute("disabled");
       } else {
         searchButton.setAttribute("disabled", "disabled");
       }
+      displayDropdown();
+      hasJustSelected = false;
     });
 
     searchInput.addEventListener("keyup", (ev) => {
@@ -969,12 +1107,105 @@
     searchButton.addEventListener("click", activateFilter);
 
     function activateFilter() {
-      const filter = searchInput.value.trim();
       const params = new URLSearchParams(location.search);
-      params.set("filter", filter);
+      if (!hasJustSelected) {
+        const filter = searchInput.value.trim();
+        params.set("filter", filter);
+      }
       location.href = getUrlWithParams(params);
     }
 
+    function findSuggestions(str) {
+      const suites = fuzzyLookup(str, runner.suites, (s) => s.fullDescription);
+      const tests = fuzzyLookup(str, runner.tests, (s) => s.fullDescription);
+      const tags = fuzzyLookup(str, [...runner.tags], (s) => s);
+      return { suites, tests, tags };
+    }
+
+    let checkboxId = Date.now();
+
+    function renderLine(str, attr, value) {
+      const id = `gtest-${checkboxId++}`;
+      return `
+        <div class="gtest-dropdown-line">
+          <input type="checkbox" id="${id}" data-${attr}="${value}"/><label for="${id}">${str}</label>
+        </div>`;
+    }
+
+    function renderDropdown(suites, tests, tags) {
+      const div = makeEl("div", ["gtest-dropdown"]);
+      let suitesHtml = "";
+      let testsHtml = "";
+      let tagsHtml = "";
+      if (suites.length) {
+        suitesHtml = `<div class="gtest-dropdown-category">Suites</div>`;
+        suitesHtml += suites
+          .slice(0, 6)
+          .map((s) => renderLine(s.fullDescription, "suite", s.hash))
+          .join("");
+      }
+      if (tests.length) {
+        testsHtml = `<div class="gtest-dropdown-category">Tests</div>`;
+        testsHtml += tests
+          .slice(0, 6)
+          .map((t) => renderLine(t.fullDescription, "test", t.hash))
+          .join("");
+      }
+      if (tags.length) {
+        tagsHtml = `<div class="gtest-dropdown-category">Tags</div>`;
+        tagsHtml += tags
+          .slice(0, 4)
+          .map((tag) => renderLine(tag, "tag", tag))
+          .join("");
+      }
+
+      div.innerHTML = suitesHtml + testsHtml + tagsHtml;
+      return div;
+    }
+
+    let searchDropdown = null;
+
+    const displayDropdown = debounce(() => {
+      if (searchDropdown) {
+        searchDropdown.remove();
+        searchDropdown = null;
+      }
+      const { suites, tests, tags } = findSuggestions(searchStr);
+      if (suites.length || tests.length || tags.length) {
+        searchDropdown = renderDropdown(suites, tests, tags);
+        searchDiv.appendChild(searchDropdown);
+      }
+    }, 100);
+
+    searchDiv.addEventListener("change", (ev) => {
+      if (ev.target.matches(".gtest-dropdown input")) {
+        hasJustSelected = true;
+        const input = ev.target;
+        const params = new URLSearchParams(location.search);
+        const test = input.dataset.test;
+        if (test) {
+          toggleMultiParam(params, input.checked, "testId", test);
+        }
+        const suite = input.dataset.suite;
+        if (suite) {
+          toggleMultiParam(params, input.checked, "suiteId", suite);
+        }
+        const tag = input.dataset.tag;
+        if (tag) {
+          toggleMultiParam(params, input.checked, "tag", tag);
+        }
+        const newurl = getUrlWithParams(params);
+        history.replaceState({ path: newurl }, "", newurl);
+        searchInput.focus();
+      }
+    });
+
+    document.body.addEventListener("click", (ev) => {
+      if (searchDropdown && !ev.target.matches(".gtest-search")) {
+        searchDropdown.remove();
+        searchDropdown = null;
+      }
+    });
     // -------------------------------------------------------------------------
     // test result reporting
     // -------------------------------------------------------------------------
