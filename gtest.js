@@ -1110,7 +1110,11 @@
       const params = new URLSearchParams(location.search);
       if (!hasJustSelected) {
         const filter = searchInput.value.trim();
-        params.set("filter", filter);
+        if (filter) {
+          params.set("filter", filter);
+        } else {
+          params.delete("filter");
+        }
       }
       location.href = getUrlWithParams(params);
     }
