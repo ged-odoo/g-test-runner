@@ -1305,7 +1305,11 @@
     }
 
     function findSuggestions(str) {
-      const suites = fuzzyLookup(str, runner.suites, (s) => s.fullDescription);
+      const suiteObj = {};
+      for (let elem of runner.suites) {
+        suiteObj[elem.fullDescription] = elem;
+      }
+      const suites = fuzzyLookup(str, Object.values(suiteObj), (s) => s.fullDescription);
       const tests = fuzzyLookup(str, runner.tests, (s) => s.fullDescription);
       const tags = fuzzyLookup(str, [...runner.tags], (s) => s);
       return { suites, tests, tags };
