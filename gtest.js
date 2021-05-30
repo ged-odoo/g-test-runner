@@ -159,6 +159,45 @@
     return results.map((r) => r.elem);
   }
 
+  function deepEqual(a, b) {
+    if (a === b) {
+      return true;
+    }
+
+    if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) {
+      return false;
+    }
+
+    if (Array.isArray(a) && Array.isArray(b)) {
+      if (a.length !== b.length) {
+        return false;
+      }
+      for (let i = 0; i < a.length; i++) {
+        if (!deepEqual(a[i], b[i])) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    const keysA = Object.keys(a);
+    const keysB = new Set(Object.keys(b));
+
+    if (keysA.length !== keysB.size) {
+      return false;
+    }
+
+    for (let k of keysA) {
+      if (!keysB.has(k)) {
+        return false;
+      }
+      if (!deepEqual(a[k], b[k])) {
+        return false;
+      }
+      return true;
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // TestRunner
   // ---------------------------------------------------------------------------
@@ -495,6 +534,44 @@
      * @param {any} expected
      * @param {string} [msg]
      */
+    deepEqual(value, expected, msg) {
+      const isOK = deepEqual(value, expected);
+      const stack = isOK ? null : new Error().stack;
+      this.assertions.push({
+        type: "equal",
+        pass: isOK,
+        expected: isOK ? null : JSON.stringify(expected),
+        value: isOK ? null : JSON.stringify(value),
+        msg: msg || (isOK ? "values are deepEqual" : "values are not deepEqual"),
+        stack,
+      });
+      this.result = this.result && isOK;
+    }
+
+    /**
+     * @param {any} value
+     * @param {any} expected
+     * @param {string} [msg]
+     */
+    notDeepEqual(value, expected, msg) {
+      const isOK = !deepEqual(value, expected);
+      const stack = isOK ? null : new Error().stack;
+      this.assertions.push({
+        type: "equal",
+        pass: isOK,
+        expected: isOK ? null : JSON.stringify(expected),
+        value: isOK ? null : JSON.stringify(value),
+        msg: msg || (isOK ? "values are not deepEqual" : "values are deepEqual"),
+        stack,
+      });
+      this.result = this.result && isOK;
+    }
+
+    /**
+     * @param {any} value
+     * @param {any} expected
+     * @param {string} [msg]
+     */
     equal(value, expected, msg) {
       const isOK = value === expected;
       const stack = isOK ? null : new Error().stack;
@@ -504,6 +581,25 @@
         expected,
         value,
         msg: msg || (isOK ? "values are equal" : "values are not equal"),
+        stack,
+      });
+      this.result = this.result && isOK;
+    }
+
+    /**
+     * @param {any} value
+     * @param {any} expected
+     * @param {string} [msg]
+     */
+    notEqual(value, expected, msg) {
+      const isOK = value !== expected;
+      const stack = isOK ? null : new Error().stack;
+      this.assertions.push({
+        type: "equal",
+        pass: isOK,
+        expected,
+        value,
+        msg: msg || (isOK ? "values are not equal" : "values are equal"),
         stack,
       });
       this.result = this.result && isOK;
@@ -1426,7 +1522,6 @@
     // reporting skipped tests
     // -------------------------------------------------------------------------
     bus.addEventListener("skipped-test", (ev) => {
-      console.log("skip", ev.detail);
       const div = makeEl("div", ["gtest-result", "gtest-skip"]);
       const testInfo = getTestInfo(ev.detail);
       div.innerHTML = `

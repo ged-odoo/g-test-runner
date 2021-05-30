@@ -119,10 +119,20 @@ checked and reported in the UI.
   have been done at the end of the test. The `assert.expect()` statement is
   not counted in that number.
 
+- **`ok(value: any, msg?: string)`** Check if the value is truthy.
+
 - **`equal(value: any, expected: any, msg?: string)`** Simple equality check. It
   uses strict equality: `value === expected`.
 
-- **`ok(value: any, msg?: string)`** Check if the value is truthy.
+- **`notEqual(value: any, expected: any, msg?: string)`** Simple non equality check. It
+  uses strict equality: `value !== expected`.
+
+- **`deepEqual(value: any, expected: any, msg?: string)`** deep equality check.
+  Note that the deep equality function does not support cycles in the shape of
+  the compared objects.
+
+- **`notDeepEqual(value: any, expected: any, msg?: string)`** The opposite of
+  `deepEqual`.
 
 - **`step(str: string)`** Used in conjunction with `verifySteps`. This assertion
   adds the string to an internal list of steps.
