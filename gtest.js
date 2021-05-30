@@ -900,7 +900,7 @@
       position: absolute;
       background-color: white;
       border: 1px solid #9e9e9e;
-      width: 454px;
+      width: 460px;
       line-height: 28px;
       font-size: 14px;
     }
@@ -909,6 +909,18 @@
       font-weight: bold;
       color: #333333;
       padding: 0 5px;
+    }
+
+    .gtest-remove-category {
+      float: right;
+      color: gray;
+      padding: 0 6px;
+      cursor: pointer;
+    }
+
+    .gtest-remove-category:hover {
+      color: black;
+      background-color: #eeeeee;
     }
 
     .gtest-dropdown-line {
@@ -1309,27 +1321,31 @@
         </div>`;
     }
 
+    function renderCategoryHeader(key, value) {
+      return `<div class="gtest-dropdown-category">${value}<span data-category="${key}" class="gtest-remove-category">✖</span></div>`;
+    }
+
     function renderDropdown(suites, tests, tags) {
       const div = makeEl("div", ["gtest-dropdown"]);
       let suitesHtml = "";
       let testsHtml = "";
       let tagsHtml = "";
       if (suites.length) {
-        suitesHtml = `<div class="gtest-dropdown-category">Suites</div>`;
+        suitesHtml = renderCategoryHeader("suiteId", "Suite");
         suitesHtml += suites
           .slice(0, 6)
           .map((s) => renderLine(s.fullDescription, "suite", s.hash))
           .join("");
       }
       if (tests.length) {
-        testsHtml = `<div class="gtest-dropdown-category">Tests</div>`;
+        testsHtml = renderCategoryHeader("testId", "Tests");
         testsHtml += tests
           .slice(0, 6)
           .map((t) => renderLine(t.fullDescription, "test", t.hash))
           .join("");
       }
       if (tags.length) {
-        tagsHtml = `<div class="gtest-dropdown-category">Tags</div>`;
+        tagsHtml = renderCategoryHeader("tag", "Tags");
         tagsHtml += tags
           .slice(0, 4)
           .map((tag) => renderLine(tag, "tag", tag))
@@ -1374,6 +1390,16 @@
         const newurl = getUrlWithParams(params);
         history.replaceState({ path: newurl }, "", newurl);
         searchInput.focus();
+      }
+    });
+
+    searchDiv.addEventListener("click", (ev) => {
+      const category = ev.target.dataset.category;
+      if (category) {
+        const params = new URLSearchParams(location.search);
+        params.delete(category);
+        const url = getUrlWithParams(params);
+        history.replaceState({ path: url }, "", url);
       }
     });
 
