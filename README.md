@@ -297,6 +297,9 @@ The following configuration keys are defined:
   test (default: `false`)
 - **`noStandaloneTest`:** if set to `true`, no test can be defined outside of a
   suite (default: `false`)
+- **`randomOrder`:** if set to `true`, the order of tests will be randomized.
+  However, tests in a suite will still be run together (so each before/after
+  method for a suite will be called once).
 
 To modify them, one has to simply override them in the `config` object:
 

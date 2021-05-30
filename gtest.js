@@ -7,6 +7,7 @@
   const location = window.location;
   const setTimeout = window.setTimeout;
   const clearTimeout = window.clearTimeout;
+  const random = Math.random;
 
   // ---------------------------------------------------------------------------
   // Utility, helpers...
@@ -198,6 +199,17 @@
     }
   }
 
+  function shuffle(array) {
+    let currentIndex = array.length;
+    let randomIndex;
+    while (0 !== currentIndex) {
+      randomIndex = Math.floor(random() * currentIndex);
+      currentIndex--;
+      [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+    }
+    return array;
+  }
+
   // ---------------------------------------------------------------------------
   // TestRunner
   // ---------------------------------------------------------------------------
@@ -214,6 +226,7 @@
       notrycatch: false,
       failFast: false,
       noStandaloneTest: false,
+      randomOrder: false,
     };
 
     bus = new Bus();
@@ -355,6 +368,7 @@
       if (filterText) {
         jobs = getValidJobs(jobs, (job) => job.fullDescription.includes(filterText));
       }
+
       return jobs;
     }
 
@@ -377,12 +391,18 @@
 
       while (this.jobs.length && this.status === "running") {
         let jobs = this.prepareJobs();
+        if (TestRunner.config.randomOrder) {
+          shuffle(jobs);
+        }
         let node = jobs.shift();
         let beforeTestFns = [];
         while (node && this.status === "running") {
           if (node instanceof Suite) {
             if (node.visited === 0) {
               // before suite code
+              if (TestRunner.config.randomOrder) {
+                shuffle(node.jobs);
+              }
               this.bus.trigger("before-suite", node);
               this.suiteStack.push(node);
               for (let fn of node.beforeFns) {
