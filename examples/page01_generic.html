@@ -163,6 +163,14 @@ suite('assert demo', () => {
         assert.deepEqual([3, "hey", {b: 1}], [3, "hey", {b: 1}]);
         assert.notDeepEqual([3, "hey", {b: 2}], [3, "hey", {b: 1}]);
     });
+
+    test('assert.throws', (assert) => {
+        assert.throws(2);
+        assert.throws(() => { throw new Error("boom")});
+        assert.throws(() => { throw new Error("boom")}, /boom/);
+        assert.throws(() => { throw new Error("bing")}, /boom/);
+    });
+
 });
 
 suite('this', 'suite', 'is', 'deeply', 'nested', () => {

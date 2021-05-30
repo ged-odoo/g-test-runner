@@ -639,8 +639,50 @@
       this.result = this.result && isOK;
     }
 
+    throws(fn, matcher, msg) {
+      if (typeof matcher === "string") {
+        msg = matcher;
+        matcher = Error;
+      }
+      if (arguments.length === 1) {
+        matcher = Error;
+      }
+      let isOk = false;
+      if (!(typeof fn === "function")) {
+        this.assertions.push({
+          type: "step",
+          pass: false,
+          msg: "assert.throws requires a function as first argument",
+          stack: new Error().stack,
+        });
+        this.result = false;
+        return;
+      }
+      msg = msg || (isOk ? "function did throw" : "function did not throw");
+      try {
+        fn();
+      } catch (e) {
+        if (matcher instanceof RegExp) {
+          isOk = !!e.message.match(matcher);
+          if (!isOk) {
+            msg = "Function did throw, but did not match the regexp";
+          }
+        } else {
+          isOk = e instanceof matcher;
+        }
+      }
+      const stack = isOk ? null : new Error().stack;
+      this.assertions.push({
+        type: "step",
+        pass: isOk,
+        msg,
+        stack,
+      });
+      this.result = this.result && isOk;
+    }
+
     step(str) {
-      if (!(typeof str === "string")) {
+      if (typeof str !== "string") {
         this.assertions.push({
           type: "step",
           pass: false,
