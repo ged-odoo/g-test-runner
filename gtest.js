@@ -1812,7 +1812,7 @@
       TestRunner,
     },
     __info__: {
-      version: "0.1",
+      version: "0.9",
     },
     config: TestRunner.config,
     ...exportedAPI,
