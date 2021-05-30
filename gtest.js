@@ -333,7 +333,11 @@
               this.bus.trigger("before-suite", node);
               this.suiteStack.push(node);
               for (let fn of node.beforeFns) {
-                fn();
+                try {
+                  await fn();
+                } catch (e) {
+                  console.error(e);
+                }
               }
               beforeTestFns.push(...node.beforeEachFns);
             }
@@ -350,7 +354,11 @@
             this.bus.trigger("before-test", node);
             const assert = new Assert();
             for (let f of beforeTestFns) {
-              f();
+              try {
+                await f();
+              } catch (e) {
+                console.error(e);
+              }
             }
             let start = Date.now();
             if (TestRunner.config.notrycatch) {
@@ -1461,10 +1469,14 @@
 
     const testCleanupFns = [];
 
-    runner.bus.addEventListener("after-test", () => {
+    runner.bus.addEventListener("after-test", async () => {
       while (testCleanupFns.length) {
         const fn = testCleanupFns.pop();
-        fn();
+        try {
+          await fn();
+        } catch (e) {
+          console.error(e);
+        }
       }
     });
 
@@ -1478,10 +1490,14 @@
       suiteCleanupStack.push([]);
     });
 
-    runner.bus.addEventListener("after-suite", () => {
+    runner.bus.addEventListener("after-suite", async () => {
       const fns = suiteCleanupStack.pop();
       while (fns.length) {
-        fns.pop()();
+        try {
+          await fns.pop()();
+        } catch (e) {
+          console.error(e);
+        }
       }
     });
 
