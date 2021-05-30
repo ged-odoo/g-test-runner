@@ -15,6 +15,14 @@ const {suite, test} = gTest;
  * Simple generic test suite
  */
 
+function wait(n) {
+    return new Promise(resolve => {
+        setTimeout(() => {
+            resolve();
+        }, n);
+    });
+}
+
 suite('math', () => {
 
     test('simple addition', (assert) => {
@@ -51,6 +59,10 @@ suite('utils', () => {
 });
 
 
+test('this test is not inside a suite', assert => {
+    assert.ok(true);
+});
+
 suite('utils', 'other sub suite', () => {
 
     test('peppa pig', assert => {
@@ -64,6 +76,24 @@ suite('utils', 'other sub suite', () => {
         assert.ok(false);
     });
 });
+
+suite('math', () => {
+    test('asynchronous math test', async (assert) => {
+        assert.equal(5 + 5, 10);
+        await wait(50);
+        assert.equal(5 + 5, 10, 'should still be 10');
+    });
+
+    test('another math test, because addition is hard', (assert) => {
+        assert.equal(5 + 5, 10);
+    });
+});
+
+suite('this', 'suite', 'is', 'deeply', 'nested', () => {
+    test('example', {tags: ['mobile-only']}, (assert) => {
+        assert.ok(true);
+    });
+})
 
 })();
 

@@ -169,11 +169,12 @@
 
   class TestRunner {
     static config = {
-      timeout: 10000,
+      timeout: 5000,
       autostart: true,
       showDetail: "first-fail",
       notrycatch: false,
       failFast: false,
+      noStandaloneTest: false,
     };
 
     bus = new Bus();
@@ -722,7 +723,9 @@
     .gtest-search > input {
       height: 24px;
       width: 450px;
+      outline: none;
       border: 1px solid gray;
+      padding: 0 5px;
     }
 
     .gtest-dropdown {
@@ -1528,6 +1531,11 @@
      * @param {(assert: Assert) => void | Promise<void>} runTest
      */
     function test(description, options, runTest) {
+      if (TestRunner.config.noStandaloneTest && !runner.current) {
+        throw new Error(
+          "Test runner is setup to refuse standalone tests. Please add a surrounding 'suite' statement."
+        );
+      }
       if (!runTest) {
         runTest = options;
         options = {};
