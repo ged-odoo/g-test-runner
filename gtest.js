@@ -201,6 +201,7 @@
     tests = [];
     suites = [];
     tags = new Set();
+    debug = false;
 
     addFilter(filter = {}) {
       this.hasFilter = true;
@@ -218,7 +219,7 @@
     /**
      * @param {string} description
      * @param {(assert: Assert) => void | Promise<void>} testFn
-     * @param {{only?: boolean, tags?: string[], skip?: boolean}} options
+     * @param {{only?: boolean, tags?: string[], skip?: boolean, debug?: boolean}} options
      */
     addTest(description, testFn, options = {}) {
       const parentTags = this.current ? this.current.tags : [];
@@ -234,6 +235,9 @@
       }
       if (options.skip) {
         test.skip = true;
+      }
+      if (options.debug) {
+        this.debug = true;
       }
       this.bus.trigger("test-added", test);
     }
@@ -395,7 +399,9 @@
               node.pass = assert.result;
               node.assertions = assert.assertions;
               node.duration = Date.now() - start;
-              this.bus.trigger("after-test", node);
+              if (!this.debug) {
+                this.bus.trigger("after-test", node);
+              }
             }
             node = node.parent || jobs.shift();
           }
@@ -1554,7 +1560,7 @@
       base[name] = function (...args) {
         const secondLast = args[args.length - 2];
         if (typeof secondLast === "object") {
-          optionsFn[secondLast];
+          optionsFn(secondLast);
         } else {
           args.splice(args.length - 1, 0, optionsFn({}));
         }
@@ -1580,11 +1586,12 @@
     }
 
     defineSubFunction(suite, "only", (options) => Object.assign(options, { only: true }));
-
     defineSubFunction(test, "only", (options) => Object.assign(options, { only: true }));
-
     defineSubFunction(suite, "skip", (options) => Object.assign(options, { skip: true }));
     defineSubFunction(test, "skip", (options) => Object.assign(options, { skip: true }));
+    defineSubFunction(test, "debug", (options) =>
+      Object.assign(options, { only: true, debug: true })
+    );
 
     async function start() {
       runner.start();

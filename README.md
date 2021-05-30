@@ -265,7 +265,11 @@ fulfill that purpose:
   });
   ```
 
-TODO: implement and document debug/skip
+- **`debug`**: this modifier can only be applied to one test. Once active, only
+  this test will be run. In addition, the system will not activate any of the
+  active cleanup functions (afterTest/afterSuite). This may be useful when
+  experimenting in the browser with code without destroying/removing the
+  tested code.
 
 ### Configuration
 
