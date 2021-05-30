@@ -196,6 +196,7 @@
     hasFilter = false;
     hashSet = new Set();
     tagSet = new Set();
+    onlySet = new Set();
     textFilter = "";
 
     tests = [];
@@ -227,7 +228,7 @@
       const test = new Test(this.current, description, testFn, tags);
       (this.current ? this.current.jobs : this.jobs).push(test);
       if (options.only) {
-        this.addFilter({ hash: test.hash });
+        this.onlySet.add(test);
       }
       this.tests.push(test);
       if (options.tags) {
@@ -255,7 +256,7 @@
       (this.current ? this.current.jobs : this.jobs).push(suite);
       this.suiteStack.push(suite);
       if (options.only) {
-        this.addFilter({ hash: suite.hash });
+        this.onlySet.add(suite);
       }
       if (options.skip) {
         suite.skip = true;
@@ -295,6 +296,11 @@
 
       let jobs = this.jobs;
       this.jobs = [];
+
+      const onlySet = this.onlySet;
+      if (onlySet.size) {
+        jobs = getValidJobs(jobs, (job) => onlySet.has(job));
+      }
 
       const hashSet = this.hashSet;
       if (hashSet.size) {
