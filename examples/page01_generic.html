@@ -38,7 +38,7 @@ suite('math', () => {
 
 suite('utils', () => {
 
-    test('first test', assert => {
+    test.skip('first test', assert => {
         assert.equal(1 + 1, 2);
     });
 
@@ -73,7 +73,7 @@ suite('utils', 'other sub suite', () => {
 
     test('dinosaur', assert => {
         assert.equal(3 + (-1), 2);
-        assert.ok(false);
+        assert.ok(true);
     });
 
     test('uses a fixture', async (assert) => {

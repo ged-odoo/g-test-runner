@@ -218,7 +218,7 @@
     /**
      * @param {string} description
      * @param {(assert: Assert) => void | Promise<void>} testFn
-     * @param {{only?: boolean, tags?: string[]}} options
+     * @param {{only?: boolean, tags?: string[], skip?: boolean}} options
      */
     addTest(description, testFn, options = {}) {
       const parentTags = this.current ? this.current.tags : [];
@@ -232,13 +232,16 @@
       if (options.tags) {
         options.tags.forEach((t) => this.tags.add(t));
       }
+      if (options.skip) {
+        test.skip = true;
+      }
       this.bus.trigger("test-added", test);
     }
 
     /**
      * @param {string} description
      * @param {() => any} suiteFn
-     * @param {{only?: boolean, tags?: string[]}} options
+     * @param {{only?: boolean, tags?: string[], skip?: boolean}} options
      */
     async addSuite(description, suiteFn, options) {
       const parentTags = this.current ? this.current.tags : [];
@@ -249,6 +252,9 @@
       this.suiteStack.push(suite);
       if (options.only) {
         this.addFilter({ hash: suite.hash });
+      }
+      if (options.skip) {
+        suite.skip = true;
       }
       let result;
       try {
@@ -298,9 +304,7 @@
 
       const filterText = escapeHTML(this.textFilter);
       if (filterText) {
-        jobs = getValidJobs(jobs, (job) =>
-          job.fullDescription.includes(filterText)
-        );
+        jobs = getValidJobs(jobs, (job) => job.fullDescription.includes(filterText));
       }
       return jobs;
     }
@@ -351,46 +355,48 @@
             }
             node = node.jobs[node.visited++] || node.parent || jobs.shift();
           } else if (node instanceof Test) {
-            this.bus.trigger("before-test", node);
-            const assert = new Assert();
-            for (let f of beforeTestFns) {
-              try {
-                await f();
-              } catch (e) {
-                console.error(e);
-              }
-            }
-            let start = Date.now();
-            if (TestRunner.config.notrycatch) {
-              await node.run(assert);
+            if (node.skip) {
+              this.bus.trigger("skipped-test", node);
             } else {
-              let isComplete = false;
-              let timeOut = new Promise((resolve, reject) => {
-                setTimeout(() => {
-                  if (isComplete) {
-                    resolve();
-                  } else {
-                    reject(
-                      new TimeoutError(
-                        `test took longer than ${TestRunner.config.timeout}ms`
-                      )
-                    );
-                  }
-                }, TestRunner.config.timeout);
-              });
-              try {
-                await Promise.race([timeOut, node.run(assert)]);
-              } catch (e) {
-                node.error = e;
-                assert.result = false;
+              this.bus.trigger("before-test", node);
+              const assert = new Assert();
+              for (let f of beforeTestFns) {
+                try {
+                  await f();
+                } catch (e) {
+                  console.error(e);
+                }
               }
-              isComplete = true;
+              let start = Date.now();
+              if (TestRunner.config.notrycatch) {
+                await node.run(assert);
+              } else {
+                let isComplete = false;
+                let timeOut = new Promise((resolve, reject) => {
+                  setTimeout(() => {
+                    if (isComplete) {
+                      resolve();
+                    } else {
+                      reject(
+                        new TimeoutError(`test took longer than ${TestRunner.config.timeout}ms`)
+                      );
+                    }
+                  }, TestRunner.config.timeout);
+                });
+                try {
+                  await Promise.race([timeOut, node.run(assert)]);
+                } catch (e) {
+                  node.error = e;
+                  assert.result = false;
+                }
+                isComplete = true;
+              }
+              assert._checkExpect();
+              node.pass = assert.result;
+              node.assertions = assert.assertions;
+              node.duration = Date.now() - start;
+              this.bus.trigger("after-test", node);
             }
-            assert._checkExpect();
-            node.pass = assert.result;
-            node.assertions = assert.assertions;
-            node.duration = Date.now() - start;
-            this.bus.trigger("after-test", node);
             node = node.parent || jobs.shift();
           }
         }
@@ -416,6 +422,7 @@
     beforeFns = [];
     beforeEachFns = [];
     visited = 0;
+    skip = false;
 
     /**
      * @param {Suite | null} parent
@@ -425,13 +432,12 @@
     constructor(parent, description, tags = []) {
       this.parent = parent || null;
       this.description = escapeHTML(description);
-      this.path = parent
-        ? parent.path.concat(this.description)
-        : [this.description];
+      this.path = parent ? parent.path.concat(this.description) : [this.description];
       this.fullDescription = this.path.join(" > ");
       this.suitePath = parent ? parent.suitePath.concat(this) : [this];
       this.hash = generateHash(this.path);
       this.tags = tags;
+      this.skip = parent ? parent.skip : false;
     }
   }
 
@@ -459,6 +465,7 @@
       this.fullDescription = parts.join(" > ");
       this.hash = generateHash(parts);
       this.tags = tags;
+      this.skip = parent ? parent.skip : false;
     }
   }
 
@@ -550,8 +557,7 @@
       }
       const stack = result ? null : new Error().stack;
 
-      const formatList = (list) =>
-        "[" + list.map((elem) => `"${elem}"`).join(", ") + "]";
+      const formatList = (list) => "[" + list.map((elem) => `"${elem}"`).join(", ") + "]";
       this.assertions.push({
         type: "verifysteps",
         pass: result,
@@ -706,6 +712,10 @@
       background-color: darkgreen;
     }
 
+    .gtest-darkorange {
+      background-color: darkorange;
+    }
+
     .gtest-text-darkred {
       color: darkred;
     }
@@ -794,6 +804,11 @@
     .gtest-result {
       border-bottom: 1px solid lightgray;
     }
+
+    .gtest-result.gtest-skip {
+      background-color: bisque;
+    }
+
     .gtest-result-line {
       margin: 5px;
     }
@@ -920,6 +935,7 @@
     let suiteNumber = 0;
     let testNumber = 0;
     let failedTestNumber = 0;
+    let skippedTestNumber = 0;
     let doneTestNumber = 0;
     let tests = {};
     let testIndex = 1;
@@ -929,6 +945,7 @@
 
     bus.addEventListener("test-added", () => testNumber++);
     bus.addEventListener("suite-added", () => suiteNumber++);
+    bus.addEventListener("skipped-test", () => skippedTestNumber++);
     bus.addEventListener("after-test", (ev) => {
       const test = ev.detail;
       doneTestNumber++;
@@ -1032,9 +1049,7 @@
     // -------------------------------------------------------------------------
     // no try/catch checkbox
     // -------------------------------------------------------------------------
-    const notrycatchCheckbox = document.getElementById(
-      "gtest-TestRunner.config.notrycatch"
-    );
+    const notrycatchCheckbox = document.getElementById("gtest-TestRunner.config.notrycatch");
     if (TestRunner.config.notrycatch) {
       notrycatchCheckbox.checked = true;
     }
@@ -1068,24 +1083,21 @@
 
     bus.addEventListener("before-test", (ev) => {
       const { description, parent } = ev.detail;
-      const fullPath = (parent ? parent.path : [])
-        .concat(description)
-        .join(" > ");
+      const fullPath = (parent ? parent.path : []).concat(description).join(" > ");
       setStatusContent(`Running: ${fullPath}`);
     });
 
     bus.addEventListener("after-all", () => {
-      const statusCls =
-        failedTestNumber === 0 ? "gtest-darkgreen" : "gtest-darkred";
+      const statusCls = failedTestNumber === 0 ? "gtest-darkgreen" : "gtest-darkred";
       const msg = `${doneTestNumber} test(s) completed`;
       const hasFilter = runner.hasFilter;
       const suiteInfo = hasFilter ? "" : ` in ${suiteNumber} suites`;
 
-      const errors = failedTestNumber
-        ? `, with ${failedTestNumber} failed`
-        : "";
+      const errors = failedTestNumber ? `, with ${failedTestNumber} failed` : "";
+
+      const skipped = skippedTestNumber ? `, with ${skippedTestNumber} skipped` : "";
       const timeInfo = ` (total time: ${Date.now() - start} ms)`;
-      const status = `<span class="gtest-circle ${statusCls}"></span> ${msg}${suiteInfo}${errors}${timeInfo}`;
+      const status = `<span class="gtest-circle ${statusCls}"></span> ${msg}${suiteInfo}${skipped}${errors}${timeInfo}`;
       setStatusContent(status);
     });
 
@@ -1221,6 +1233,7 @@
         searchDropdown = null;
       }
     });
+
     // -------------------------------------------------------------------------
     // test result reporting
     // -------------------------------------------------------------------------
@@ -1236,11 +1249,44 @@
       }
     });
 
+    function getTestInfo(test, index) {
+      const suite = test.parent;
+      let params = new URLSearchParams(location.search);
+
+      let suitesHtml = "";
+      if (suite) {
+        const suiteLinks = suite.suitePath.map((s) => {
+          params.set("suiteId", s.hash);
+          params.delete("testId");
+          params.delete("tag");
+          return `<a href="${getUrlWithParams(params)}" draggable="false">${s.description}</a>`;
+        });
+        const fullPath = suiteLinks.join(" > ") + " > ";
+        suitesHtml = `<span class="gtest-cell">${index ? index + ". " : " "}${fullPath}</span>`;
+      }
+
+      params = new URLSearchParams(location.search);
+      params.set("testId", test.hash);
+      params.delete("tag");
+      params.delete("suiteId");
+      const url = getUrlWithParams(params);
+      const assertions = index ? ` (${test.assertions.length})` : "";
+      const testHtml = `<a class="gtest-name" draggable="false" href="${url}">${test.description}${assertions}</a>`;
+      const tags = test.tags
+        .map((t) => {
+          params.delete("testId");
+          params.set("tag", t);
+          const tagUrl = getUrlWithParams(params);
+          return `<a class="gtest-tag" href="${tagUrl}">${t}</a>`;
+        })
+        .join("");
+      return suitesHtml + testHtml + tags;
+    }
+
     /**
      * @param {Test} test
      */
     function addTestResult(test) {
-      const suite = test.parent;
       const index = testIndex++;
       tests[index] = test;
       // header
@@ -1250,39 +1296,9 @@
       const result = document.createElement("span");
       result.classList.add("gtest-circle");
       result.classList.add(test.pass ? "gtest-darkgreen" : "gtest-darkred");
-      let params = new URLSearchParams(location.search);
-
-      let suitesHtml = "";
-      if (suite) {
-        const suiteLinks = suite.suitePath.map((s) => {
-          params.set("suiteId", s.hash);
-          params.delete("testId");
-          params.delete("tag");
-          return `<a href="${getUrlWithParams(params)}" draggable="false">${
-            s.description
-          }</a>`;
-        });
-        const fullPath = suiteLinks.join(" > ") + " > ";
-        suitesHtml = `<span class="gtest-cell">${index}. ${fullPath}</span>`;
-      }
-
-      params = new URLSearchParams(location.search);
-      params.set("testId", test.hash);
-      params.delete("tag");
-      params.delete("suiteId");
-      const url = getUrlWithParams(params);
-      const testHtml = `<a class="gtest-name" draggable="false" href="${url}">${test.description} (${test.assertions.length})</a>`;
-      const tags = test.tags
-        .map((t) => {
-          params.delete("testId");
-          params.set("tag", t);
-          const tagUrl = getUrlWithParams(params);
-          return `<a class="gtest-tag" href="${tagUrl}">${t}</a>`;
-        })
-        .join("");
       const openBtn = `<span class="gtest-open" data-index="${index}"> toggle details</span>`;
       const durationHtml = `<span class="gtest-duration">${test.duration} ms</span>`;
-      header.innerHTML = suitesHtml + testHtml + tags + openBtn + durationHtml;
+      header.innerHTML = getTestInfo(test, index) + openBtn + durationHtml;
       header.prepend(result);
 
       // test result div
@@ -1297,8 +1313,7 @@
       if (!test.pass) {
         const showDetailConfig = TestRunner.config.showDetail;
         const shouldShowDetail =
-          showDetailConfig === "failed" ||
-          (showDetailConfig === "first-fail" && !didShowDetail);
+          showDetailConfig === "failed" || (showDetailConfig === "first-fail" && !didShowDetail);
         if (shouldShowDetail) {
           toggleDetailedTestResult(index, div);
           didShowDetail = true;
@@ -1319,10 +1334,7 @@
           addAssertionInfo(results, i, assertions[i]);
         }
         if (test.error) {
-          const div = makeEl("div", [
-            "gtest-result-line",
-            "gtest-text-darkred",
-          ]);
+          const div = makeEl("div", ["gtest-result-line", "gtest-text-darkred"]);
           div.innerText = `Died on test #${testIndex}`;
           results.appendChild(div);
           addInfoTable(results, [
@@ -1339,18 +1351,12 @@
     function addAssertionInfo(parentEl, index, assertion) {
       const div = document.createElement("div");
       div.classList.add("gtest-result-line");
-      const lineCls = assertion.pass
-        ? "gtest-text-darkgreen"
-        : "gtest-text-darkred";
+      const lineCls = assertion.pass ? "gtest-text-darkgreen" : "gtest-text-darkred";
       div.classList.add(lineCls);
       div.innerText = `${index + 1}. ${assertion.msg}`;
       parentEl.appendChild(div);
       if (!assertion.pass) {
-        const stack = assertion.stack
-          .toString()
-          .split("\n")
-          .slice(1)
-          .join("\n");
+        const stack = assertion.stack.toString().split("\n").slice(1).join("\n");
 
         switch (assertion.type) {
           case "equal":
@@ -1405,6 +1411,22 @@
     }
 
     // -------------------------------------------------------------------------
+    // reporting skipped tests
+    // -------------------------------------------------------------------------
+    bus.addEventListener("skipped-test", (ev) => {
+      console.log("skip", ev.detail);
+      const div = makeEl("div", ["gtest-result", "gtest-skip"]);
+      const testInfo = getTestInfo(ev.detail);
+      div.innerHTML = `
+        <div class="gtest-result-header">
+          <span class="gtest-circle gtest-darkorange"></span>
+          ${testInfo}
+          <span>(skipped)</span>
+        </div>`;
+      reporting.appendChild(div);
+    });
+
+    // -------------------------------------------------------------------------
     // misc ui polish
     // -------------------------------------------------------------------------
 
@@ -1451,18 +1473,14 @@
 
     function beforeSuite(callback) {
       if (!runner.current) {
-        throw new Error(
-          `"beforeSuite" should only be called inside a suite definition`
-        );
+        throw new Error(`"beforeSuite" should only be called inside a suite definition`);
       }
       runner.current.beforeFns.push(callback);
     }
 
     function beforeEach(callback) {
       if (!runner.current) {
-        throw new Error(
-          `"beforeEach" should only be called inside a suite definition`
-        );
+        throw new Error(`"beforeEach" should only be called inside a suite definition`);
       }
       runner.current.beforeEachFns.push(callback);
     }
@@ -1504,9 +1522,7 @@
     function afterSuite(callback) {
       const fns = suiteCleanupStack[suiteCleanupStack.length - 1];
       if (!fns) {
-        throw new Error(
-          `"afterSuite" can only be called when a suite is currently running`
-        );
+        throw new Error(`"afterSuite" can only be called when a suite is currently running`);
       }
       fns.push(callback);
     }
@@ -1529,18 +1545,22 @@
       }
     }
 
-    suite.only = function restrict(description, options, cb) {
-      if (typeof cb === "string") {
-        let nestedArgs = Array.from(arguments).slice(1);
-        suite(description, options, () => suite.only(...nestedArgs));
-      } else {
-        if (!cb) {
-          cb = options;
-          options = {};
+    /**
+     * Very specific function: it takes a base function, a name of a property,
+     * and defines base[name] that has the same signature, except that it injects
+     * some options as the second last argument
+     */
+    function defineSubFunction(base, name, optionsFn) {
+      base[name] = function (...args) {
+        const secondLast = args[args.length - 2];
+        if (typeof secondLast === "object") {
+          optionsFn[secondLast];
+        } else {
+          args.splice(args.length - 1, 0, optionsFn({}));
         }
-        runner.addSuite(description, cb, options);
-      }
-    };
+        base(...args);
+      };
+    }
 
     /**
      * @param {string} description
@@ -1559,14 +1579,12 @@
       runner.addTest(description, runTest, options);
     }
 
-    test.only = function restrict(description, options, runTest) {
-      if (!runTest) {
-        runTest = options;
-        options = {};
-      }
-      options.only = true;
-      test(description, options, runTest);
-    };
+    defineSubFunction(suite, "only", (options) => Object.assign(options, { only: true }));
+
+    defineSubFunction(test, "only", (options) => Object.assign(options, { only: true }));
+
+    defineSubFunction(suite, "skip", (options) => Object.assign(options, { skip: true }));
+    defineSubFunction(test, "skip", (options) => Object.assign(options, { skip: true }));
 
     async function start() {
       runner.start();

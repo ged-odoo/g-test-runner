@@ -248,6 +248,23 @@ fulfill that purpose:
   });
   ```
 
+- **`skip`**: can be applied on a test or on a suite. This will cause the test
+  runner to skip the test or suite (but it will still be reported in the UI)
+
+  ```js
+  test.skip("some test", () => {
+    // this test will not be run
+  });
+  ```
+
+  or
+
+  ```js
+  suite.skip("some suite", () => {
+    // skip this suite will be run
+  });
+  ```
+
 TODO: implement and document debug/skip
 
 ### Configuration

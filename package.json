@@ -15,5 +15,8 @@
   "bugs": {
     "url": "https://github.com/ged-odoo/g-test-runner/issues"
   },
-  "homepage": "https://github.com/ged-odoo/g-test-runner#readme"
+  "homepage": "https://github.com/ged-odoo/g-test-runner#readme",
+  "prettier": {
+    "printWidth": 100
+  }
 }
