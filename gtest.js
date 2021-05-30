@@ -1208,7 +1208,7 @@
     });
 
     document.body.addEventListener("click", (ev) => {
-      if (searchDropdown && !ev.target.matches(".gtest-search")) {
+      if (searchDropdown && !searchDiv.contains(ev.target)) {
         searchDropdown.remove();
         searchDropdown = null;
       }
