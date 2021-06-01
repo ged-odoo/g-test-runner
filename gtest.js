@@ -8,6 +8,7 @@
   const setTimeout = window.setTimeout;
   const clearTimeout = window.clearTimeout;
   const random = Math.random;
+  const userAgent = navigator.userAgent;
 
   // ---------------------------------------------------------------------------
   // Utility, helpers...
@@ -210,7 +211,7 @@
     return array;
   }
 
-  const isFirefox = navigator.userAgent.includes("Firefox");
+  const isFirefox = userAgent.includes("Firefox");
 
   function formatStack(stack) {
     return isFirefox ? stack : stack.toString().split("\n").slice(1).join("\n");
@@ -745,6 +746,7 @@
       <div class="gtest-panel">
         <div class="gtest-panel-top">
           <span class="gtest-logo">gTest</span>
+          <span class="gtest-useragent"></span>
         </div>
         <div class="gtest-panel-main">
           <button class="gtest-btn gtest-abort">Start</button>
@@ -778,7 +780,7 @@
       font-family: sans-serif;
       height: 100%;
       display: grid;
-      grid-template-rows: 124px auto;
+      grid-template-rows: 150px auto;
       position: absolute;
       top: 0;
       bottom: 0;
@@ -854,10 +856,18 @@
 
     .gtest-status {
       background-color: #D2E0E6;
-      height: 30px;
-      line-height: 30px;
+      height: 28px;
+      line-height: 28px;
       font-size: 14px;
       padding-left: 12px;
+    }
+
+    .gtest-useragent {
+      font-size: 13px;
+      padding-right: 15px;
+      float: right;
+      margin: 15px 0;
+      color: #444444;
     }
 
     .gtest-circle {
@@ -1143,6 +1153,7 @@
 
     const div = document.createElement("div");
     div.innerHTML = html;
+    div.querySelector(".gtest-useragent").innerText = userAgent;
     document.body.prepend(div.firstElementChild);
     const sheet = document.createElement("style");
     sheet.innerHTML = style;
