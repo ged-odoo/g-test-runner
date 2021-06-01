@@ -210,6 +210,12 @@
     return array;
   }
 
+  const isFirefox = navigator.userAgent.includes("Firefox");
+
+  function formatStack(stack) {
+    return isFirefox ? stack : stack.toString().split("\n").slice(1).join("\n");
+  }
+
   // ---------------------------------------------------------------------------
   // TestRunner
   // ---------------------------------------------------------------------------
@@ -558,11 +564,10 @@
       const isOK = deepEqual(value, expected);
       const stack = isOK ? null : new Error().stack;
       this.assertions.push({
-        type: "equal",
         pass: isOK,
+        msg: msg || (isOK ? "values are deepEqual" : "values are not deepEqual"),
         expected: isOK ? null : JSON.stringify(expected),
         value: isOK ? null : JSON.stringify(value),
-        msg: msg || (isOK ? "values are deepEqual" : "values are not deepEqual"),
         stack,
       });
       this.result = this.result && isOK;
@@ -577,11 +582,10 @@
       const isOK = !deepEqual(value, expected);
       const stack = isOK ? null : new Error().stack;
       this.assertions.push({
-        type: "equal",
         pass: isOK,
+        msg: msg || (isOK ? "values are not deepEqual" : "values are deepEqual"),
         expected: isOK ? null : JSON.stringify(expected),
         value: isOK ? null : JSON.stringify(value),
-        msg: msg || (isOK ? "values are not deepEqual" : "values are deepEqual"),
         stack,
       });
       this.result = this.result && isOK;
@@ -596,11 +600,10 @@
       const isOK = value === expected;
       const stack = isOK ? null : new Error().stack;
       this.assertions.push({
-        type: "equal",
         pass: isOK,
+        msg: msg || (isOK ? "values are equal" : "values are not equal"),
         expected,
         value,
-        msg: msg || (isOK ? "values are equal" : "values are not equal"),
         stack,
       });
       this.result = this.result && isOK;
@@ -615,11 +618,10 @@
       const isOK = value !== expected;
       const stack = isOK ? null : new Error().stack;
       this.assertions.push({
-        type: "equal",
         pass: isOK,
+        msg: msg || (isOK ? "values are not equal" : "values are equal"),
         expected,
         value,
-        msg: msg || (isOK ? "values are not equal" : "values are equal"),
         stack,
       });
       this.result = this.result && isOK;
@@ -631,7 +633,6 @@
         const actualNumber = this.assertions.length;
         if (actualNumber !== n) {
           this.assertions.push({
-            type: "expect",
             pass: false,
             msg: `Expected ${n} assertions, but ${actualNumber} were run`,
             stack,
@@ -649,11 +650,10 @@
       const isOK = Boolean(value);
       const stack = isOK ? null : new Error().stack;
       this.assertions.push({
-        type: "ok",
         pass: isOK,
-        value,
-        expected: "true",
         msg: msg || (isOK ? "value is truthy" : "value is not truthy"),
+        expected: "true",
+        value,
         stack,
       });
       this.result = this.result && isOK;
@@ -670,7 +670,6 @@
       let isOk = false;
       if (!(typeof fn === "function")) {
         this.assertions.push({
-          type: "step",
           pass: false,
           msg: "assert.throws requires a function as first argument",
           stack: new Error().stack,
@@ -693,7 +692,6 @@
       }
       const stack = isOk ? null : new Error().stack;
       this.assertions.push({
-        type: "step",
         pass: isOk,
         msg,
         stack,
@@ -704,7 +702,6 @@
     step(str) {
       if (typeof str !== "string") {
         this.assertions.push({
-          type: "step",
           pass: false,
           msg: "assert.step requires a string",
           stack: new Error().stack,
@@ -712,7 +709,6 @@
         this.result = false;
       } else {
         this.assertions.push({
-          type: "step",
           pass: true,
           msg: `step: "${str}"`,
         });
@@ -729,11 +725,10 @@
 
       const formatList = (list) => "[" + list.map((elem) => `"${elem}"`).join(", ") + "]";
       this.assertions.push({
-        type: "verifysteps",
         pass: result,
-        value: formatList(this.steps),
-        expected: formatList(steps),
         msg: msg || (result ? "steps are correct" : "steps are not correct"),
+        expected: formatList(steps),
+        value: formatList(this.steps),
         stack,
       });
       this.steps = [];
@@ -1555,37 +1550,27 @@
       div.classList.add(lineCls);
       div.innerText = `${index + 1}. ${assertion.msg}`;
       parentEl.appendChild(div);
-      if (!assertion.pass) {
-        const stack = assertion.stack.toString().split("\n").slice(1).join("\n");
-
-        switch (assertion.type) {
-          case "equal":
-          case "ok":
-          case "verifysteps":
-            addInfoTable(parentEl, [
-              [
-                `<span class="gtest-text-green">Expected:</span>`,
-                `<span>${escapeHTML(assertion.expected)}</span>`,
-              ],
-              [
-                `<span class="gtest-text-red">Result:</span>`,
-                `<span>${escapeHTML(assertion.value)}</span>`,
-              ],
-              [
-                `<span class="gtest-text-darkred">Source:</span>`,
-                `<pre class="gtest-stack">${stack}</pre>`,
-              ],
-            ]);
-            break;
-          case "step":
-          case "expect":
-            addInfoTable(parentEl, [
-              [
-                `<span class="gtest-text-darkred">Source:</span>`,
-                `<pre class="gtest-stack">${stack}</pre>`,
-              ],
-            ]);
-        }
+      const lines = [];
+      if ("expected" in assertion) {
+        lines.push([
+          `<span class="gtest-text-green">Expected:</span>`,
+          `<span>${escapeHTML(assertion.expected)}</span>`,
+        ]);
+      }
+      if ("value" in assertion) {
+        lines.push([
+          `<span class="gtest-text-red">Result:</span>`,
+          `<span>${escapeHTML(assertion.value)}</span>`,
+        ]);
+      }
+      if (assertion.stack) {
+        lines.push([
+          `<span class="gtest-text-darkred">Source:</span>`,
+          `<pre class="gtest-stack">${formatStack(assertion.stack)}</pre>`,
+        ]);
+      }
+      if (lines.length) {
+        addInfoTable(parentEl, lines);
       }
     }
 

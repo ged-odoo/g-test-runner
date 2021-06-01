@@ -1,6 +1,6 @@
 {
   "name": "g-test-runner",
-  "version": "0.9",
+  "version": "0.9.0",
   "description": "A simple javascript test runner (for browser)",
   "author": "Gery Debongnie",
   "license": "MIT",
