@@ -1,190 +1,187 @@
-<!doctype html>
-<html lang=en>
-<head>
-<meta charset=utf-8>
-<title>gTest</title>
-</head>
-<body>
-<script src="../gtest.js"></script>
-<script>
-(function () {
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>gTest</title>
+  </head>
+  <body>
+    <script src="../gtest.js"></script>
+    <script>
+      (function () {
+        const { suite, test, getFixture } = gTest;
 
-const {suite, test, getFixture} = gTest;
+        /**
+         * Simple generic test suite
+         */
 
-/**
- * Simple generic test suite
- */
+        function wait(n) {
+          return new Promise((resolve) => {
+            setTimeout(() => {
+              resolve();
+            }, n);
+          });
+        }
 
-function wait(n) {
-    return new Promise(resolve => {
-        setTimeout(() => {
-            resolve();
-        }, n);
-    });
-}
-
-suite('math', () => {
-
-    test('simple addition', (assert) => {
-        assert.equal(1 + 1, 2, "1 + 1 should be equal to 2");
-        assert.equal(1 + 2, 3);
-    });
-
-    test('addition with negative number', {tags: ['mobile-only']}, (assert) => {
-        assert.equal(3 + (-1), 2);
-        assert.ok(true, "this work!")
-    });
-});
-
-suite('utils', () => {
-
-    test.skip('first test', assert => {
-        assert.equal(1 + 1, 2);
-    });
-
-    test('snd test', assert => {
-        assert.equal(3 + (-1), 2);
-    });
-
-    suite('sub suite', () => {
-
-        test('something is happening', assert => {
-            assert.ok(0, 'hey');
-        });
-
-        test('blabla', {tags: ['mobile-only']}, assert => {
-            assert.ok(1, 'hey');
-        });
-    })
-});
-
-
-test('this test is not inside a suite', assert => {
-    assert.ok(true);
-});
-
-suite('utils', 'other sub suite', () => {
-
-    test('peppa pig', assert => {
-        assert.equal(1 + 1, 2);
-        assert.equal(1 + 1, 2);
-        assert.equal(1 + 1, 2);
-    });
-
-    test('dinosaur', assert => {
-        assert.equal(3 + (-1), 2);
-        assert.ok(true);
-    });
-
-    test('uses a fixture', async (assert) => {
-        const fixture = getFixture();
-        const div = document.createElement("div");
-        div.classList.add("blip");
-        div.style = "background-color: red;width: 100px; height: 100px";
-        fixture.appendChild(div);
-
-        assert.equal(fixture.innerHTML, '<div class="blip" style="background-color: red; width: 100px; height: 100px;"></div>')
-    });
-
-    suite('this <div>suite</div> name has <b>html</b>', () => {
-
-        test('same for <span>this test</span>', (assert) => {
+        suite("math", () => {
+          test("simple addition", (assert) => {
+            assert.equal(1 + 1, 2, "1 + 1 should be equal to 2");
             assert.equal(1 + 2, 3);
-            assert.equal(1 + 2, 3, "some <html> in this </html> assertion message");
-            assert.equal("<abc>def</abc>", "<def>abc</def>");
+          });
+
+          test("addition with negative number", { tags: ["mobile-only"] }, (assert) => {
+            assert.equal(3 + -1, 2);
+            assert.ok(true, "this work!");
+          });
         });
 
-    });
-});
+        suite("utils", () => {
+          test.skip("first test", (assert) => {
+            assert.equal(1 + 1, 2);
+          });
 
-suite('math', () => {
-    test('asynchronous math test', async (assert) => {
-        assert.equal(5 + 5, 10);
-        await wait(50);
-        assert.equal(5 + 5, 10, 'should still be 10');
-    });
+          test("snd test", (assert) => {
+            assert.equal(3 + -1, 2);
+          });
 
-    test('another math test, because addition is hard', (assert) => {
-        assert.equal(5 + 5, 10);
-    });
-});
+          suite("sub suite", () => {
+            test("something is happening", (assert) => {
+              assert.ok(0, "hey");
+            });
 
-suite('assert demo', () => {
+            test("blabla", { tags: ["mobile-only"] }, (assert) => {
+              assert.ok(1, "hey");
+            });
+          });
+        });
 
-    test('assert.equal', (assert) => {
-        assert.equal(1 + 1, 2);
-        assert.equal(1 + 1, 2, "1 + 1 should be equal to 2");
-        assert.equal(1 + 1, 3);
-        assert.equal(1 + 1, 3, "1 + 1 should be equal to 2");
-    });
+        test("this test is not inside a suite", (assert) => {
+          assert.ok(true);
+        });
 
-    test('assert.ok', (assert) => {
-        assert.ok(true);
-        assert.ok(true, "msg");
-        assert.ok(false);
-        assert.ok(false, "msg");
-        assert.not.ok(true);
-        assert.not.ok(true, "msg");
-        assert.not.ok(false);
-        assert.not.ok(false, "msg");
-    });
+        suite("utils", "other sub suite", () => {
+          test("peppa pig", (assert) => {
+            assert.equal(1 + 1, 2);
+            assert.equal(1 + 1, 2);
+            assert.equal(1 + 1, 2);
+          });
 
-    test('assert.step (success)', (assert) => {
-        assert.step("abc");
-        assert.step("def");
-        assert.verifySteps(["abc", "def"]);
-        assert.step("again");
-        assert.verifySteps(["again"]);
-    });
+          test("dinosaur", (assert) => {
+            assert.equal(3 + -1, 2);
+            assert.ok(true);
+          });
 
-    test('assert.step (failure)', (assert) => {
-        assert.step("def");
-        assert.step("abc");
-        assert.verifySteps(["abc", "def"]);
-        assert.step("again");
-        assert.verifySteps(["again"]);
-    });
+          test("uses a fixture", async (assert) => {
+            const fixture = getFixture();
+            const div = document.createElement("div");
+            div.classList.add("blip");
+            div.style = "background-color: red;width: 100px; height: 100px";
+            fixture.appendChild(div);
 
-    test('assert.step with a non string', (assert) => {
-        assert.step(123);
-    });
+            assert.equal(
+              fixture.innerHTML,
+              '<div class="blip" style="background-color: red; width: 100px; height: 100px;"></div>'
+            );
+          });
 
-    test('assert.expect, success', (assert) => {
-        assert.expect(2);
-        assert.ok(true);
-        assert.ok(true);
-    });
+          suite("this <div>suite</div> name has <b>html</b>", () => {
+            test("same for <span>this test</span>", (assert) => {
+              assert.equal(1 + 2, 3);
+              assert.equal(1 + 2, 3, "some <html> in this </html> assertion message");
+              assert.equal("<abc>def</abc>", "<def>abc</def>");
+            });
+          });
+        });
 
-    test('assert.expect, fail', (assert) => {
-        assert.expect(2);
-        assert.ok(true);
-    });
+        suite("math", () => {
+          test("asynchronous math test", async (assert) => {
+            assert.equal(5 + 5, 10);
+            await wait(50);
+            assert.equal(5 + 5, 10, "should still be 10");
+          });
 
-    test('assert.deepEqual and assert.notDeepEqual', (assert) => {
-        assert.deepEqual(true, true);
-        assert.deepEqual(null, null);
-        assert.deepEqual([], []);
-        assert.deepEqual([3, "hey", {b: 1}], [3, "hey", {b: 1}]);
-        assert.not.deepEqual([3, "hey", {b: 2}], [3, "hey", {b: 1}]);
-    });
+          test("another math test, because addition is hard", (assert) => {
+            assert.equal(5 + 5, 10);
+          });
+        });
 
-    test('assert.throws', (assert) => {
-        assert.throws(2);
-        assert.throws(() => { throw new Error("boom")});
-        assert.throws(() => { throw new Error("boom")}, /boom/);
-        assert.throws(() => { throw new Error("bing")}, /boom/);
-    });
+        suite("assert demo", () => {
+          test("assert.equal", (assert) => {
+            assert.equal(1 + 1, 2);
+            assert.equal(1 + 1, 2, "1 + 1 should be equal to 2");
+            assert.equal(1 + 1, 3);
+            assert.equal(1 + 1, 3, "1 + 1 should be equal to 2");
+          });
 
-});
+          test("assert.ok", (assert) => {
+            assert.ok(true);
+            assert.ok(true, "msg");
+            assert.ok(false);
+            assert.ok(false, "msg");
+            assert.not.ok(true);
+            assert.not.ok(true, "msg");
+            assert.not.ok(false);
+            assert.not.ok(false, "msg");
+          });
 
-suite('this', 'suite', 'is', 'deeply', 'nested', () => {
-    test('example', {tags: ['mobile-only']}, (assert) => {
-        assert.ok(true);
-    });
-});
+          test("assert.step (success)", (assert) => {
+            assert.step("abc");
+            assert.step("def");
+            assert.verifySteps(["abc", "def"]);
+            assert.step("again");
+            assert.verifySteps(["again"]);
+          });
 
-})();
+          test("assert.step (failure)", (assert) => {
+            assert.step("def");
+            assert.step("abc");
+            assert.verifySteps(["abc", "def"]);
+            assert.step("again");
+            assert.verifySteps(["again"]);
+          });
 
-</script>
-</body>
+          test("assert.step with a non string", (assert) => {
+            assert.step(123);
+          });
+
+          test("assert.expect, success", (assert) => {
+            assert.expect(2);
+            assert.ok(true);
+            assert.ok(true);
+          });
+
+          test("assert.expect, fail", (assert) => {
+            assert.expect(2);
+            assert.ok(true);
+          });
+
+          test("assert.deepEqual and assert.notDeepEqual", (assert) => {
+            assert.deepEqual(true, true);
+            assert.deepEqual(null, null);
+            assert.deepEqual([], []);
+            assert.deepEqual([3, "hey", { b: 1 }], [3, "hey", { b: 1 }]);
+            assert.not.deepEqual([3, "hey", { b: 2 }], [3, "hey", { b: 1 }]);
+          });
+
+          test("assert.throws", (assert) => {
+            assert.throws(2);
+            assert.throws(() => {
+              throw new Error("boom");
+            });
+            assert.throws(() => {
+              throw new Error("boom");
+            }, /boom/);
+            assert.throws(() => {
+              throw new Error("bing");
+            }, /boom/);
+          });
+        });
+
+        suite("this", "suite", "is", "deeply", "nested", () => {
+          test("example", { tags: ["mobile-only"] }, (assert) => {
+            assert.ok(true);
+          });
+        });
+      })();
+    </script>
+  </body>
 </html>

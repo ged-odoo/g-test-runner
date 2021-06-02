@@ -1,40 +1,35 @@
-<!doctype html>
-<html lang=en>
-<head>
-<meta charset=utf-8>
-<title>gTest</title>
-</head>
-<body>
-<script src="../gtest.js"></script>
-<script>
-(function () {
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>gTest</title>
+  </head>
+  <body>
+    <script src="../gtest.js"></script>
+    <script>
+      (function () {
+        const { suite, test } = gTest;
 
-const {suite, test} = gTest;
+        /**
+         * Simple generic test suite
+         */
 
-/**
- * Simple generic test suite
- */
+        suite("error in a suite function", () => {
+          test("this test will pass", (assert) => {
+            assert.equal(1 + 2, 3);
+          });
 
-suite('error in a suite function', () => {
+          throw new Error("boom");
 
-    test('this test will pass', (assert) => {
-        assert.equal(1 + 2, 3);
-    });
+          test("this test will not be run", (assert) => {
+            assert.equal(1 + 2, 3);
+          });
+        });
 
-    throw new Error("boom");
-
-    test('this test will not be run', (assert) => {
-        assert.equal(1 + 2, 3);
-    });
-});
-
-
-test('this test should pass', (assert) => {
-    assert.equal(1 + 2, 3);
-});
-
-})();
-
-</script>
-</body>
+        test("this test should pass", (assert) => {
+          assert.equal(1 + 2, 3);
+        });
+      })();
+    </script>
+  </body>
 </html>

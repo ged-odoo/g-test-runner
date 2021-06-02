@@ -1,65 +1,58 @@
-<!doctype html>
-<html lang=en>
-<head>
-<meta charset=utf-8>
-<title>gTest</title>
-</head>
-<body>
-<script src="../gtest.js"></script>
-<script>
-(async function () {
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>gTest</title>
+  </head>
+  <body>
+    <script src="../gtest.js"></script>
+    <script>
+      (async function () {
+        const { suite, test } = gTest;
 
-const {suite, test} = gTest;
+        /**
+         * We add here a test suite while the runner is running. We expect the
+         * test runner to correctly add it to the list of suites that need to be
+         * executed.
+         */
 
-/**
- * We add here a test suite while the runner is running. We expect the
- * test runner to correctly add it to the list of suites that need to be
- * executed.
- */
+        function wait(n) {
+          return new Promise((resolve) => {
+            setTimeout(() => {
+              resolve();
+            }, n);
+          });
+        }
 
-function wait(n) {
-    return new Promise(resolve => {
-        setTimeout(() => {
-            resolve();
-        }, n);
-    })
-}
+        suite("math", () => {
+          test("simple addition", async (assert) => {
+            await wait(1000);
+            assert.equal(1 + 1, 2);
+            assert.equal(1 + 2, 2);
+          });
 
-suite('math', () => {
+          test("addition with negative number", async (assert) => {
+            await wait(1000);
+            assert.equal(3 + -1, 2);
+          });
+        });
 
-    test('simple addition', async (assert) => {
-        await wait(1000);
-        assert.equal(1 + 1, 2);
-        assert.equal(1 + 2, 2);
-    });
+        await wait(500); // so everything is ready
 
-    test('addition with negative number', async (assert) => {
-        await wait(1000);
-        assert.equal(3 + (-1), 2);
-    });
-});
+        gTest.start();
 
-await wait(500); // so everything is ready
+        await wait(1000); // so next suite is defined after runner is starting
 
+        suite("utils", () => {
+          test("first test", (assert) => {
+            assert.equal(1 + 1, 2);
+          });
 
-gTest.start();
-
-
-await wait(1000); // so next suite is defined after runner is starting
-
-suite('utils', () => {
-
-    test('first test', assert => {
-        assert.equal(1 + 1, 2);
-    });
-
-    test('snd test', assert => {
-        assert.equal(3 + (-1), 2);
-    });
-});
-
-})();
-
-</script>
-</body>
+          test("snd test", (assert) => {
+            assert.equal(3 + -1, 2);
+          });
+        });
+      })();
+    </script>
+  </body>
 </html>
