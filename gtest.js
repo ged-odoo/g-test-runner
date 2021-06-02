@@ -234,6 +234,7 @@
       failFast: false,
       noStandaloneTest: false,
       randomOrder: false,
+      extendAssert,
     };
 
     bus = new Bus();
@@ -463,13 +464,13 @@
                   await Promise.race([timeOut, node.run(assert)]);
                 } catch (e) {
                   node.error = e;
-                  assert.result = false;
+                  assert._pass = false;
                 }
                 isComplete = true;
               }
               assert._checkExpect();
-              node.pass = assert.result;
-              node.assertions = assert.assertions;
+              node.pass = assert._pass;
+              node.assertions = assert._assertions;
               node.duration = Date.now() - start;
               if (!this.debug) {
                 this.bus.trigger("after-test", node);
@@ -547,195 +548,208 @@
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Assertions
+  // ---------------------------------------------------------------------------
+
   class Assert {
     /** @type {any[]} */
-    assertions = [];
+    _assertions = [];
     _checkExpect = () => {};
+    _isNot = false;
+    _pass = true;
 
-    result = true;
-
-    steps = [];
-
-    /**
-     * @param {any} value
-     * @param {any} expected
-     * @param {string} [msg]
-     */
-    deepEqual(value, expected, msg) {
-      const isOK = deepEqual(value, expected);
-      const stack = isOK ? null : new Error().stack;
-      this.assertions.push({
-        pass: isOK,
-        msg: msg || (isOK ? "values are deepEqual" : "values are not deepEqual"),
-        expected: isOK ? null : JSON.stringify(expected),
-        value: isOK ? null : JSON.stringify(value),
-        stack,
-      });
-      this.result = this.result && isOK;
-    }
-
-    /**
-     * @param {any} value
-     * @param {any} expected
-     * @param {string} [msg]
-     */
-    notDeepEqual(value, expected, msg) {
-      const isOK = !deepEqual(value, expected);
-      const stack = isOK ? null : new Error().stack;
-      this.assertions.push({
-        pass: isOK,
-        msg: msg || (isOK ? "values are not deepEqual" : "values are deepEqual"),
-        expected: isOK ? null : JSON.stringify(expected),
-        value: isOK ? null : JSON.stringify(value),
-        stack,
-      });
-      this.result = this.result && isOK;
-    }
-
-    /**
-     * @param {any} value
-     * @param {any} expected
-     * @param {string} [msg]
-     */
-    equal(value, expected, msg) {
-      const isOK = value === expected;
-      const stack = isOK ? null : new Error().stack;
-      this.assertions.push({
-        pass: isOK,
-        msg: msg || (isOK ? "values are equal" : "values are not equal"),
-        expected,
-        value,
-        stack,
-      });
-      this.result = this.result && isOK;
-    }
-
-    /**
-     * @param {any} value
-     * @param {any} expected
-     * @param {string} [msg]
-     */
-    notEqual(value, expected, msg) {
-      const isOK = value !== expected;
-      const stack = isOK ? null : new Error().stack;
-      this.assertions.push({
-        pass: isOK,
-        msg: msg || (isOK ? "values are not equal" : "values are equal"),
-        expected,
-        value,
-        stack,
-      });
-      this.result = this.result && isOK;
+    get not() {
+      const result = Object.create(this);
+      result._isNot = !this._isNot;
+      return result;
     }
 
     expect(n) {
       const stack = new Error().stack;
       this._checkExpect = () => {
-        const actualNumber = this.assertions.length;
+        const actualNumber = this._assertions.length;
         if (actualNumber !== n) {
-          this.assertions.push({
+          this._assertions.push({
             pass: false,
-            msg: `Expected ${n} assertions, but ${actualNumber} were run`,
+            message: () => `Expected ${n} assertions, but ${actualNumber} were run`,
             stack,
           });
-          this.result = false;
+          this._pass = false;
         }
       };
     }
+  }
 
-    /**
-     * @param {any} value
-     * @param {string} [msg]
-     */
-    ok(value, msg) {
-      const isOK = Boolean(value);
-      const stack = isOK ? null : new Error().stack;
-      this.assertions.push({
-        pass: isOK,
-        msg: msg || (isOK ? "value is truthy" : "value is not truthy"),
-        expected: "true",
+  function extendAssert(name, fn) {
+    if (name in Assert.prototype) {
+      throw new Error(`'${name}' assertion type already exists`);
+    }
+    Assert.prototype[name] = {
+      [name](...args) {
+        const isNot = this._isNot;
+        const applyModifier = (pass) => (isNot ? !pass : Boolean(pass));
+        const info = { isNot, stack: new Error().stack, applyModifier };
+        const assertion = fn.call(this, info, ...args);
+        if (!("message" in assertion)) {
+          assertion.message = () => (assertion.pass ? "okay" : "not okay");
+        }
+        this._assertions.push(assertion);
+        this._pass = Boolean(this._pass && assertion.pass);
+      },
+    }[name];
+  }
+
+  extendAssert("equal", ({ isNot, stack, applyModifier }, value, expected, msg) => {
+    const pass = applyModifier(value === expected);
+    if (pass) {
+      const message = () => msg || `values are ${isNot ? "not " : ""}equal`;
+      return { pass, message };
+    } else {
+      const message = () => msg || `expected values ${isNot ? "not " : ""}to be equal`;
+      return {
+        pass,
+        message,
+        expected,
         value,
         stack,
-      });
-      this.result = this.result && isOK;
+      };
     }
+  });
 
-    throws(fn, matcher, msg) {
-      if (typeof matcher === "string") {
-        msg = matcher;
-        matcher = Error;
-      }
-      if (arguments.length === 1) {
-        matcher = Error;
-      }
-      let isOk = false;
-      if (!(typeof fn === "function")) {
-        this.assertions.push({
-          pass: false,
-          msg: "assert.throws requires a function as first argument",
-          stack: new Error().stack,
-        });
-        this.result = false;
-        return;
-      }
-      msg = msg || (isOk ? "function did throw" : "function did not throw");
-      try {
-        fn();
-      } catch (e) {
-        if (matcher instanceof RegExp) {
-          isOk = !!e.message.match(matcher);
-          if (!isOk) {
-            msg = "Function did throw, but did not match the regexp";
-          }
-        } else {
-          isOk = e instanceof matcher;
-        }
-      }
-      const stack = isOk ? null : new Error().stack;
-      this.assertions.push({
-        pass: isOk,
-        msg,
+  extendAssert("deepEqual", ({ isNot, stack, applyModifier }, value, expected, msg) => {
+    const pass = applyModifier(deepEqual(value, expected));
+    if (pass) {
+      const message = () => msg || `values are ${isNot ? "not " : ""}deep equal`;
+      return { pass, message };
+    } else {
+      const message = () => msg || `expected values ${isNot ? "not " : ""}to be deep equal`;
+      return {
+        pass,
+        message,
+        expected,
+        value,
         stack,
-      });
-      this.result = this.result && isOk;
+      };
     }
+  });
 
-    step(str) {
-      if (typeof str !== "string") {
-        this.assertions.push({
+  extendAssert("ok", ({ isNot, stack, applyModifier }, value, msg) => {
+    const pass = applyModifier(value);
+    const suffix = msg ? ` (${msg})` : "";
+    if (pass) {
+      const message = () => `value is ${isNot ? "not " : ""}truthy${suffix}`;
+      return { pass, message };
+    } else {
+      const message = () => `expected value ${isNot ? "not " : ""}to be truthy${suffix}`;
+      return {
+        pass,
+        message,
+        value,
+        stack,
+      };
+    }
+  });
+
+  extendAssert("throws", ({ isNot, stack, applyModifier }, fn, matcher, msg) => {
+    if (typeof matcher === "string") {
+      msg = matcher;
+      matcher = Error;
+    }
+    if (arguments.length === 2) {
+      matcher = Error;
+    }
+    if (!(typeof fn === "function")) {
+      return {
+        pass: false,
+        msg: "assert.throws requires a function as first argument",
+        stack: new Error().stack,
+      };
+    }
+    const shouldThrow = !isNot;
+
+    try {
+      fn();
+    } catch (e) {
+      if (shouldThrow) {
+        const message = () => msg || `expected function not to throw`;
+        return {
           pass: false,
-          msg: "assert.step requires a string",
-          stack: new Error().stack,
-        });
-        this.result = false;
+          message,
+          stack,
+        };
+      }
+      const pass = matcher instanceof RegExp ? e.message.match(matcher) : e instanceof matcher;
+      if (pass) {
+        const message = () => msg || `function did throw`;
+        return { pass, message };
       } else {
-        this.assertions.push({
-          pass: true,
-          msg: `step: "${str}"`,
-        });
-        this.steps.push(str);
+        const message = () => msg || `function did throw, but error is not valid`;
+        return {
+          pass,
+          message,
+          stack,
+        };
       }
     }
-
-    verifySteps(steps, msg) {
-      let result = true;
-      for (let i = 0; i < steps.length; i++) {
-        result = result && steps[i] === this.steps[i];
-      }
-      const stack = result ? null : new Error().stack;
-
-      const formatList = (list) => "[" + list.map((elem) => `"${elem}"`).join(", ") + "]";
-      this.assertions.push({
-        pass: result,
-        msg: msg || (result ? "steps are correct" : "steps are not correct"),
-        expected: formatList(steps),
-        value: formatList(this.steps),
+    if (!shouldThrow) {
+      const message = () => msg || `function did not throw`;
+      return { pass: true, message };
+    } else {
+      const message = () => msg || `expected function to throw`;
+      return {
+        pass: false,
+        message,
         stack,
-      });
-      this.steps = [];
-      this.result = this.result && result;
+      };
     }
-  }
+  });
+
+  extendAssert("step", function ({ isNot, stack }, str) {
+    if (isNot) {
+      return { pass: false, message: () => `assert.step cannot be negated`, stack };
+    }
+    if (typeof str !== "string") {
+      return {
+        pass: false,
+        message: () => "assert.step requires a string",
+        stack,
+      };
+    }
+    this._steps = this._steps || [];
+    this._steps.push(str);
+    return {
+      pass: true,
+      message: () => `step: "${str}"`,
+    };
+  });
+
+  extendAssert("verifySteps", function ({ isNot, stack }, steps, message) {
+    if (isNot) {
+      return { pass: false, message: () => `assert.verifySteps cannot be negated`, stack };
+    }
+    const expectedSteps = this._steps || [];
+    let pass = true;
+    for (let i = 0; i < steps.length; i++) {
+      pass = pass && steps[i] === expectedSteps[i];
+    }
+    this._steps = [];
+    if (pass) {
+      return {
+        pass,
+        message: () => message || "steps are correct",
+      };
+    }
+
+    const formatList = (list) => "[" + list.map((elem) => `"${elem}"`).join(", ") + "]";
+    return {
+      pass,
+      message: () => message || "steps are not correct",
+      expected: formatList(expectedSteps),
+      value: formatList(steps),
+      stack,
+    };
+  });
 
   // ---------------------------------------------------------------------------
   // gTest main UI
@@ -1559,7 +1573,7 @@
       div.classList.add("gtest-result-line");
       const lineCls = assertion.pass ? "gtest-text-darkgreen" : "gtest-text-darkred";
       div.classList.add(lineCls);
-      div.innerText = `${index + 1}. ${assertion.msg}`;
+      div.innerText = `${index + 1}. ${assertion.message()}`;
       parentEl.appendChild(div);
       const lines = [];
       if ("expected" in assertion) {

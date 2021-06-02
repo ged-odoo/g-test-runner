@@ -124,15 +124,9 @@ checked and reported in the UI.
 - **`equal(value: any, expected: any, msg?: string)`** Simple equality check. It
   uses strict equality: `value === expected`.
 
-- **`notEqual(value: any, expected: any, msg?: string)`** Simple non equality check. It
-  uses strict equality: `value !== expected`.
-
 - **`deepEqual(value: any, expected: any, msg?: string)`** deep equality check.
   Note that the deep equality function does not support cycles in the shape of
   the compared objects.
-
-- **`notDeepEqual(value: any, expected: any, msg?: string)`** The opposite of
-  `deepEqual`.
 
 - **`step(str: string)`** Used in conjunction with `verifySteps`. This assertion
   adds the string to an internal list of steps.
@@ -140,6 +134,19 @@ checked and reported in the UI.
 - **`verifySteps(string[], msg?: string)`** Used in conjunction with `step`. Check
   that the internal list of steps is deeply equal to the list of steps given in
   first argument. Also, clear that internal list.
+
+- **`throws(fn: Function, matcher?: string || Function, msg?: string)`** Check if
+  a function `fn` throws. If a matcher is given, we also verify that the error
+  message contains the string, or that the error is an instanceof the matcher
+  (useful for sub error classes)
+
+Also, most assertions can be negated with `.not`:
+
+```js
+assert.not.equal("foo", "bar");
+assert.not.ok(false);
+assert.not.throws(someFn);
+```
 
 ### Cleanup: before/after functions
 
@@ -309,3 +316,35 @@ gTest.config.failFast = true;
 
 Note that it should be setup before it is actually used. So, for example,
 `autostart` should be set before the DOM is loaded.
+
+There is also a `extendAssert` method, discussed in the next session.
+
+### Extending assert system
+
+It is convenient to be able to add assertion types, to better match the logic
+of the domain being tested. To do that, we can use the `extendAssert` method,
+as shown below:
+
+```js
+gTest.config.extendAssert('isBetween', ({stack, applyModifier}, value, a, b)) => {
+    const pass = applyModifier(a <= value && value <= b);
+    if (pass) {
+        const message = () => `value is ${isNot ? "not " : ""}between ${a} and ${b}`;
+      return { pass, message };
+    } else {
+    const message = () => `expected value ${isNot ? "not " : ""}to be between ${a} and ${b}`;
+      return {
+        pass,
+        message,
+        stack,
+      };
+    }
+});
+```
+
+This example can then be used in a test like this:
+
+```js
+assert.isBetween(value, 0, 10);
+assert.not.isBetween(value, 0, 10);
+```
