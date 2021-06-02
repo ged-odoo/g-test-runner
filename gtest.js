@@ -604,13 +604,13 @@
     }[name];
   }
 
-  extendAssert("equal", ({ isNot, stack, applyModifier }, value, expected, msg) => {
+  extendAssert("equal", ({ isNot, stack, applyModifier }, value, expected) => {
     const pass = applyModifier(value === expected);
     if (pass) {
-      const message = () => msg || `values are ${isNot ? "not " : ""}equal`;
+      const message = () => `values are ${isNot ? "not " : ""}equal`;
       return { pass, message };
     } else {
-      const message = () => msg || `expected values ${isNot ? "not " : ""}to be equal`;
+      const message = () => `expected values ${isNot ? "not " : ""}to be equal`;
       return {
         pass,
         message,
@@ -621,13 +621,13 @@
     }
   });
 
-  extendAssert("deepEqual", ({ isNot, stack, applyModifier }, value, expected, msg) => {
+  extendAssert("deepEqual", ({ isNot, stack, applyModifier }, value, expected) => {
     const pass = applyModifier(deepEqual(value, expected));
     if (pass) {
-      const message = () => msg || `values are ${isNot ? "not " : ""}deep equal`;
+      const message = () => `values are ${isNot ? "not " : ""}deep equal`;
       return { pass, message };
     } else {
-      const message = () => msg || `expected values ${isNot ? "not " : ""}to be deep equal`;
+      const message = () => `expected values ${isNot ? "not " : ""}to be deep equal`;
       return {
         pass,
         message,
@@ -638,14 +638,13 @@
     }
   });
 
-  extendAssert("ok", ({ isNot, stack, applyModifier }, value, msg) => {
+  extendAssert("ok", ({ isNot, stack, applyModifier }, value) => {
     const pass = applyModifier(value);
-    const suffix = msg ? ` (${msg})` : "";
     if (pass) {
-      const message = () => `value is ${isNot ? "not " : ""}truthy${suffix}`;
+      const message = () => `value is ${isNot ? "not " : ""}truthy`;
       return { pass, message };
     } else {
-      const message = () => `expected value ${isNot ? "not " : ""}to be truthy${suffix}`;
+      const message = () => `expected value ${isNot ? "not " : ""}to be truthy`;
       return {
         pass,
         message,
@@ -655,14 +654,7 @@
     }
   });
 
-  extendAssert("throws", ({ isNot, stack, applyModifier }, fn, matcher, msg) => {
-    if (typeof matcher === "string") {
-      msg = matcher;
-      matcher = Error;
-    }
-    if (arguments.length === 2) {
-      matcher = Error;
-    }
+  extendAssert("throws", ({ isNot, stack }, fn, matcher = Error) => {
     if (!(typeof fn === "function")) {
       return {
         pass: false,
@@ -676,7 +668,7 @@
       fn();
     } catch (e) {
       if (shouldThrow) {
-        const message = () => msg || `expected function not to throw`;
+        const message = () => `expected function not to throw`;
         return {
           pass: false,
           message,
@@ -685,10 +677,10 @@
       }
       const pass = matcher instanceof RegExp ? e.message.match(matcher) : e instanceof matcher;
       if (pass) {
-        const message = () => msg || `function did throw`;
+        const message = () => `function did throw`;
         return { pass, message };
       } else {
-        const message = () => msg || `function did throw, but error is not valid`;
+        const message = () => `function did throw, but error is not valid`;
         return {
           pass,
           message,
@@ -697,10 +689,10 @@
       }
     }
     if (!shouldThrow) {
-      const message = () => msg || `function did not throw`;
+      const message = () => `function did not throw`;
       return { pass: true, message };
     } else {
-      const message = () => msg || `expected function to throw`;
+      const message = () => `expected function to throw`;
       return {
         pass: false,
         message,
@@ -728,7 +720,7 @@
     };
   });
 
-  extendAssert("verifySteps", function ({ isNot, stack }, steps, message) {
+  extendAssert("verifySteps", function ({ isNot, stack }, steps) {
     if (isNot) {
       return { pass: false, message: () => `assert.verifySteps cannot be negated`, stack };
     }
@@ -741,14 +733,14 @@
     if (pass) {
       return {
         pass,
-        message: () => message || "steps are correct",
+        message: () => "steps are correct",
       };
     }
 
     const formatList = (list) => "[" + list.map((elem) => `"${elem}"`).join(", ") + "]";
     return {
       pass,
-      message: () => message || "steps are not correct",
+      message: () => "steps are not correct",
       expected: formatList(expectedSteps),
       value: formatList(steps),
       stack,
@@ -1019,8 +1011,9 @@
     }
 
     .gtest-result-header {
-      padding: 4px 12px;
+      padding: 0 12px;
       cursor: default;
+      line-height: 27px;
     }
 
     .gtest-result-header a {
@@ -1594,7 +1587,7 @@
       }
       if ("value" in assertion) {
         lines.push([
-          `<span class="gtest-text-red">Result:</span>`,
+          `<span class="gtest-text-red">Received:</span>`,
           `<span>${escapeHTML(assertion.value)}</span>`,
         ]);
       }

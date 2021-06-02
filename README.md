@@ -119,23 +119,23 @@ checked and reported in the UI.
   have been done at the end of the test. The `assert.expect()` statement is
   not counted in that number.
 
-- **`ok(value: any, msg?: string)`** Check if the value is truthy.
+- **`ok(value: any)`** Check if the value is truthy.
 
-- **`equal(value: any, expected: any, msg?: string)`** Simple equality check. It
+- **`equal(value: any, expected: any)`** Simple equality check. It
   uses strict equality: `value === expected`.
 
-- **`deepEqual(value: any, expected: any, msg?: string)`** deep equality check.
+- **`deepEqual(value: any, expected: any)`** deep equality check.
   Note that the deep equality function does not support cycles in the shape of
   the compared objects.
 
 - **`step(str: string)`** Used in conjunction with `verifySteps`. This assertion
   adds the string to an internal list of steps.
 
-- **`verifySteps(string[], msg?: string)`** Used in conjunction with `step`. Check
+- **`verifySteps(string[])`** Used in conjunction with `step`. Check
   that the internal list of steps is deeply equal to the list of steps given in
   first argument. Also, clear that internal list.
 
-- **`throws(fn: Function, matcher?: string || Function, msg?: string)`** Check if
+- **`throws(fn: Function, matcher?: string || Function)`** Check if
   a function `fn` throws. If a matcher is given, we also verify that the error
   message contains the string, or that the error is an instanceof the matcher
   (useful for sub error classes)
