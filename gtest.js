@@ -255,6 +255,7 @@
     // miscellaneous filtering rules
     hasFilter = false;
     hashSet = new Set();
+    skipSet = new Set();
     tagSet = new Set();
     onlySet = new Set();
     textFilter = "";
@@ -275,6 +276,9 @@
       if (filter.text) {
         this.textFilter = filter.text;
       }
+      if (filter.skip) {
+        this.skipSet.add(filter.skip);
+      }
     }
 
     /**
@@ -294,7 +298,7 @@
       if (options.tags) {
         options.tags.forEach((t) => this.tags.add(t));
       }
-      if (options.skip) {
+      if (options.skip || this.skipSet.has(test.hash)) {
         test.skip = true;
       }
       if (options.debug) {
@@ -318,7 +322,7 @@
       if (options.only) {
         this.onlySet.add(suite);
       }
-      if (options.skip) {
+      if (options.skip || this.skipSet.has(suite.hash)) {
         suite.skip = true;
       }
       let result;
@@ -1107,6 +1111,12 @@
     const filter = queryParams.get("filter");
     if (filter) {
       runner.addFilter({ text: filter });
+    }
+    const skipParam = queryParams.get("skip");
+    if (skipParam) {
+      for (let skip of skipParam.split(",")) {
+        runner.addFilter({ skip });
+      }
     }
 
     const hasTestId = queryParams.has("testId");
