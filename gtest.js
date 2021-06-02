@@ -798,7 +798,7 @@
       font-family: sans-serif;
       height: 100%;
       display: grid;
-      grid-template-rows: 150px auto;
+      grid-template-rows: 122px auto;
       position: absolute;
       top: 0;
       bottom: 0;
@@ -876,7 +876,7 @@
       background-color: #D2E0E6;
       height: 28px;
       line-height: 28px;
-      font-size: 14px;
+      font-size: 13px;
       padding-left: 12px;
     }
 
@@ -945,7 +945,7 @@
       border: 1px solid #9e9e9e;
       width: 460px;
       line-height: 28px;
-      font-size: 14px;
+      font-size: 13px;
     }
 
     .gtest-dropdown-category {
@@ -979,18 +979,18 @@
     }
 
     .gtest-tag {
-      margin: 5px;
+      margin: 5px 3px;
       background: darkcyan;
       color: white;
       padding: 2px 5px;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: bold;
       border-radius: 7px;
     }
 
     .gtest-reporting {
       padding-left: 20px;
-      font-size: 14px;
+      font-size: 13px;
       overflow: auto;
     }
 
@@ -1178,7 +1178,7 @@
     const div = document.createElement("div");
     div.innerHTML = html;
     div.querySelector(".gtest-useragent").innerText = userAgent;
-    document.body.prepend(div.firstElementChild);
+    document.body.prepend(...div.children);
     const sheet = document.createElement("style");
     sheet.innerHTML = style;
     document.head.appendChild(sheet);
