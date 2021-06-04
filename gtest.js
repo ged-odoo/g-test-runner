@@ -287,6 +287,9 @@
      * @param {{only?: boolean, tags?: string[], skip?: boolean, debug?: boolean}} options
      */
     addTest(description, testFn, options = {}) {
+      if (this.status !== "ready") {
+        throw new Error("Cannot add a test after starting the test runner");
+      }
       const parentTags = this.current ? this.current.tags : [];
       const tags = parentTags.concat(options.tags || []);
       const test = new Test(this.current, description, testFn, tags);
@@ -313,6 +316,9 @@
      * @param {{only?: boolean, tags?: string[], skip?: boolean}} options
      */
     async addSuite(description, suiteFn, options) {
+      if (this.status !== "ready") {
+        throw new Error("Cannot add a suite after starting the test runner");
+      }
       const parentTags = this.current ? this.current.tags : [];
       const testTags = options.tags || [];
       const tags = parentTags.concat(testTags);
@@ -1682,6 +1688,8 @@
       afterTest(() => div.remove());
       return div;
     }
+
+    let suiteStack = [];
 
     function beforeSuite(callback) {
       if (!runner.current) {
