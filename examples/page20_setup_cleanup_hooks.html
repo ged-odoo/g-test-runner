@@ -10,9 +10,9 @@
       (function () {
         const { suite, test, beforeSuite, afterSuite, beforeEach, afterTest } = gTest;
 
-        /**
-         * Simple generic test suite
-         */
+        beforeEach(() => {
+          console.log("before each tests!");
+        });
 
         suite("simple example", () => {
           beforeSuite(() => {

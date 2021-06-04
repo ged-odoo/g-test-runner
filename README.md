@@ -224,6 +224,9 @@ after inner suite
 after outer suite
 ```
 
+Note that `beforeEach` can also be called outside a suite. In that case, it will
+simply register a function that will be run before all tests.
+
 ### Fixtures
 
 When a test has to work with the DOM, it should do so by getting a parent

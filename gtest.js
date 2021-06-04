@@ -243,6 +243,7 @@
     jobs = [];
 
     suiteStack = [];
+    beforeEachTestFns = [];
 
     /** @type {Suite | undefined} */
     get current() {
@@ -413,7 +414,7 @@
           shuffle(jobs);
         }
         let node = jobs.shift();
-        let beforeTestFns = [];
+        let beforeTestFns = this.beforeEachTestFns;
         while (node && this.status === "running") {
           if (node instanceof Suite) {
             if (node.visited === 0) {
@@ -1689,8 +1690,6 @@
       return div;
     }
 
-    let suiteStack = [];
-
     function beforeSuite(callback) {
       if (!runner.current) {
         throw new Error(`"beforeSuite" should only be called inside a suite definition`);
@@ -1700,9 +1699,10 @@
 
     function beforeEach(callback) {
       if (!runner.current) {
-        throw new Error(`"beforeEach" should only be called inside a suite definition`);
+        runner.beforeEachTestFns.push(callback);
+      } else {
+        runner.current.beforeEachFns.push(callback);
       }
-      runner.current.beforeEachFns.push(callback);
     }
 
     const testCleanupFns = [];
