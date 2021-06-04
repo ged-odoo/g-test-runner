@@ -329,7 +329,7 @@ of the domain being tested. To do that, we can use the `extendAssert` method,
 as shown below:
 
 ```js
-gTest.config.extendAssert('isBetween', ({stack, applyModifier}, value, a, b)) => {
+gTest.extendAssert('isBetween', ({stack, applyModifier}, value, a, b)) => {
     const pass = applyModifier(a <= value && value <= b);
     if (pass) {
         const message = () => `value is ${isNot ? "not " : ""}between ${a} and ${b}`;

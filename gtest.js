@@ -1,26 +1,15 @@
-(function gTestRunner() {
-  // ---------------------------------------------------------------------------
-  // Capturing some browser methods
-  // ---------------------------------------------------------------------------
+(function () {
+  'use strict';
 
   // in case some testing code decides to mock them
-  const location = window.location;
-  const setTimeout = window.setTimeout;
+  const location$4 = window.location;
+  const setTimeout$1 = window.setTimeout;
   const clearTimeout = window.clearTimeout;
   const random = Math.random;
-  const userAgent = navigator.userAgent;
 
   // ---------------------------------------------------------------------------
   // Utility, helpers...
   // ---------------------------------------------------------------------------
-
-  const domReady = new Promise((resolve) => {
-    if (document.readyState !== "loading") {
-      resolve();
-    } else {
-      document.addEventListener("DOMContentLoaded", resolve, false);
-    }
-  });
 
   /**
    * Based on Java's String.hashCode, a simple but not
@@ -54,33 +43,7 @@
    */
   function getUrlWithParams(params) {
     const query = params.toString();
-    return `${location.pathname}${query ? "?" + query : ""}${location.hash}`;
-  }
-
-  /**
-   * @param {URLSearchParams} params
-   */
-  function toggleMultiParam(params, active, key, value) {
-    const values = params.getAll(key);
-    params.delete(key);
-    for (let val of values) {
-      if (val !== value) {
-        params.append(key, val);
-      }
-    }
-    if (active) {
-      params.append(key, value);
-    }
-  }
-
-  class Bus extends EventTarget {
-    /**
-     * @param {string} name
-     * @param {any} payload
-     */
-    trigger(name, payload) {
-      this.dispatchEvent(new CustomEvent(name, { detail: payload }));
-    }
+    return `${location$4.pathname}${query ? "?" + query : ""}${location$4.hash}`;
   }
 
   function escapeHTML(str) {
@@ -101,7 +64,7 @@
       }
       const callNow = immediate && !timeout;
       clearTimeout(timeout);
-      timeout = setTimeout(later, wait);
+      timeout = setTimeout$1(later, wait);
       if (callNow) {
         func.apply(context, args);
       }
@@ -211,11 +174,91 @@
     return array;
   }
 
-  const isFirefox = userAgent.includes("Firefox");
-
-  function formatStack(stack) {
-    return isFirefox ? stack : stack.toString().split("\n").slice(1).join("\n");
+  class Bus extends EventTarget {
+    /**
+     * @param {string} name
+     * @param {any} payload
+     */
+    trigger(name, payload) {
+      this.dispatchEvent(new CustomEvent(name, { detail: payload }));
+    }
   }
+
+  class Assert {
+    static extend = function extend(name, fn) {
+      if (name in Assert.prototype) {
+        throw new Error(`'${name}' assertion type already exists`);
+      }
+      Assert.prototype[name] = {
+        [name](...args) {
+          const isNot = this._isNot;
+          const applyModifier = (pass) => (isNot ? !pass : Boolean(pass));
+          const info = { isNot, stack: new Error().stack, applyModifier };
+          const assertion = fn.call(this, info, ...args);
+          if (!("message" in assertion)) {
+            assertion.message = () => (assertion.pass ? "okay" : "not okay");
+          }
+          this._assertions.push(assertion);
+          this._pass = Boolean(this._pass && assertion.pass);
+        },
+      }[name];
+    };
+
+    /** @type {any[]} */
+    _assertions = [];
+    _checkExpect = () => {};
+    _isNot = false;
+    _pass = true;
+
+    get not() {
+      const result = Object.create(this);
+      result._isNot = !this._isNot;
+      return result;
+    }
+
+    expect(n) {
+      const stack = new Error().stack;
+      this._checkExpect = () => {
+        const actualNumber = this._assertions.length;
+        if (actualNumber !== n) {
+          this._assertions.push({
+            pass: false,
+            message: () => `Expected ${n} assertions, but ${actualNumber} were run`,
+            stack,
+          });
+          this._pass = false;
+        }
+      };
+    }
+  }
+
+  const config = {
+      timeout: 5000,
+      autostart: true,
+      showDetail: "first-fail",
+      notrycatch: false,
+      failFast: false,
+      noStandaloneTest: false,
+      randomOrder: false,
+    };
+
+  const domReady = new Promise((resolve) => {
+    if (document.readyState !== "loading") {
+      resolve();
+    } else {
+      document.addEventListener("DOMContentLoaded", resolve, false);
+    }
+  });
+
+  function makeEl(tag, classes) {
+    const elem = document.createElement(tag);
+    for (let cl of classes) {
+      elem.classList.add(cl);
+    }
+    return elem;
+  }
+
+  const setTimeout = window.setTimeout;
 
   // ---------------------------------------------------------------------------
   // TestRunner
@@ -226,17 +269,6 @@
   }
 
   class TestRunner {
-    static config = {
-      timeout: 5000,
-      autostart: true,
-      showDetail: "first-fail",
-      notrycatch: false,
-      failFast: false,
-      noStandaloneTest: false,
-      randomOrder: false,
-      extendAssert,
-    };
-
     bus = new Bus();
 
     /** @type {Job[]} */
@@ -265,6 +297,13 @@
     suites = [];
     tags = new Set();
     debug = false;
+
+    // some useful info for reporting
+    suiteNumber = 0;
+    testNumber = 0;
+    failedTestNumber = 0;
+    skippedTestNumber = 0;
+    doneTestNumber = 0;
 
     addFilter(filter = {}) {
       this.hasFilter = true;
@@ -308,6 +347,7 @@
       if (options.debug) {
         this.debug = true;
       }
+      this.testNumber++;
       this.bus.trigger("test-added", test);
     }
 
@@ -339,6 +379,7 @@
         this.suiteStack.pop();
         this.suites.push(suite);
         testTags.forEach((t) => this.tags.add(t));
+        this.suiteNumber++;
         this.bus.trigger("suite-added", suite);
       }
       if (result !== undefined) {
@@ -393,11 +434,14 @@
 
     async start() {
       await domReady; // may need dom for some tests
+      await Promise.resolve(); // make sure code that want to run right after
+      // dom ready get the opportunity to execute (and maybe listen to some
+      // events, such as before-all)
 
       if (this.status !== "ready") {
         return;
       }
-      if (TestRunner.config.failFast) {
+      if (config.failFast) {
         this.bus.addEventListener("after-test", (ev) => {
           if (!ev.detail.pass) {
             this.stop();
@@ -410,7 +454,7 @@
 
       while (this.jobs.length && this.status === "running") {
         let jobs = this.prepareJobs();
-        if (TestRunner.config.randomOrder) {
+        if (config.randomOrder) {
           shuffle(jobs);
         }
         let node = jobs.shift();
@@ -419,7 +463,7 @@
           if (node instanceof Suite) {
             if (node.visited === 0) {
               // before suite code
-              if (TestRunner.config.randomOrder) {
+              if (config.randomOrder) {
                 shuffle(node.jobs);
               }
               this.bus.trigger("before-suite", node);
@@ -444,6 +488,7 @@
             node = node.jobs[node.visited++] || node.parent || jobs.shift();
           } else if (node instanceof Test) {
             if (node.skip) {
+              this.skippedTestNumber++;
               this.bus.trigger("skipped-test", node);
             } else {
               this.bus.trigger("before-test", node);
@@ -456,7 +501,7 @@
                 }
               }
               let start = Date.now();
-              if (TestRunner.config.notrycatch) {
+              if (config.notrycatch) {
                 await node.run(assert);
               } else {
                 let isComplete = false;
@@ -465,11 +510,9 @@
                     if (isComplete) {
                       resolve();
                     } else {
-                      reject(
-                        new TimeoutError(`test took longer than ${TestRunner.config.timeout}ms`)
-                      );
+                      reject(new TimeoutError(`test took longer than ${config.timeout}ms`));
                     }
-                  }, TestRunner.config.timeout);
+                  }, config.timeout);
                 });
                 try {
                   await Promise.race([timeOut, node.run(assert)]);
@@ -484,6 +527,10 @@
               node.assertions = assert._assertions;
               node.duration = Date.now() - start;
               if (!this.debug) {
+                this.doneTestNumber++;
+                if (!node.pass) {
+                  this.failedTestNumber++;
+                }
                 this.bus.trigger("after-test", node);
               }
             }
@@ -559,633 +606,7 @@
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Assertions
-  // ---------------------------------------------------------------------------
-
-  class Assert {
-    /** @type {any[]} */
-    _assertions = [];
-    _checkExpect = () => {};
-    _isNot = false;
-    _pass = true;
-
-    get not() {
-      const result = Object.create(this);
-      result._isNot = !this._isNot;
-      return result;
-    }
-
-    expect(n) {
-      const stack = new Error().stack;
-      this._checkExpect = () => {
-        const actualNumber = this._assertions.length;
-        if (actualNumber !== n) {
-          this._assertions.push({
-            pass: false,
-            message: () => `Expected ${n} assertions, but ${actualNumber} were run`,
-            stack,
-          });
-          this._pass = false;
-        }
-      };
-    }
-  }
-
-  function extendAssert(name, fn) {
-    if (name in Assert.prototype) {
-      throw new Error(`'${name}' assertion type already exists`);
-    }
-    Assert.prototype[name] = {
-      [name](...args) {
-        const isNot = this._isNot;
-        const applyModifier = (pass) => (isNot ? !pass : Boolean(pass));
-        const info = { isNot, stack: new Error().stack, applyModifier };
-        const assertion = fn.call(this, info, ...args);
-        if (!("message" in assertion)) {
-          assertion.message = () => (assertion.pass ? "okay" : "not okay");
-        }
-        this._assertions.push(assertion);
-        this._pass = Boolean(this._pass && assertion.pass);
-      },
-    }[name];
-  }
-
-  extendAssert("equal", ({ isNot, stack, applyModifier }, value, expected) => {
-    const pass = applyModifier(value === expected);
-    if (pass) {
-      const message = () => `values are ${isNot ? "not " : ""}equal`;
-      return { pass, message };
-    } else {
-      const message = () => `expected values ${isNot ? "not " : ""}to be equal`;
-      return {
-        pass,
-        message,
-        expected,
-        value,
-        stack,
-      };
-    }
-  });
-
-  extendAssert("deepEqual", ({ isNot, stack, applyModifier }, value, expected) => {
-    const pass = applyModifier(deepEqual(value, expected));
-    if (pass) {
-      const message = () => `values are ${isNot ? "not " : ""}deep equal`;
-      return { pass, message };
-    } else {
-      const message = () => `expected values ${isNot ? "not " : ""}to be deep equal`;
-      return {
-        pass,
-        message,
-        expected,
-        value,
-        stack,
-      };
-    }
-  });
-
-  extendAssert("ok", ({ isNot, stack, applyModifier }, value) => {
-    const pass = applyModifier(value);
-    if (pass) {
-      const message = () => `value is ${isNot ? "not " : ""}truthy`;
-      return { pass, message };
-    } else {
-      const message = () => `expected value ${isNot ? "not " : ""}to be truthy`;
-      return {
-        pass,
-        message,
-        value,
-        stack,
-      };
-    }
-  });
-
-  extendAssert("throws", ({ isNot, stack }, fn, matcher = Error) => {
-    if (!(typeof fn === "function")) {
-      return {
-        pass: false,
-        msg: "assert.throws requires a function as first argument",
-        stack: new Error().stack,
-      };
-    }
-    const shouldThrow = !isNot;
-
-    try {
-      fn();
-    } catch (e) {
-      if (shouldThrow) {
-        const message = () => `expected function not to throw`;
-        return {
-          pass: false,
-          message,
-          stack,
-        };
-      }
-      const pass = matcher instanceof RegExp ? e.message.match(matcher) : e instanceof matcher;
-      if (pass) {
-        const message = () => `function did throw`;
-        return { pass, message };
-      } else {
-        const message = () => `function did throw, but error is not valid`;
-        return {
-          pass,
-          message,
-          stack,
-        };
-      }
-    }
-    if (!shouldThrow) {
-      const message = () => `function did not throw`;
-      return { pass: true, message };
-    } else {
-      const message = () => `expected function to throw`;
-      return {
-        pass: false,
-        message,
-        stack,
-      };
-    }
-  });
-
-  extendAssert("step", function ({ isNot, stack }, str) {
-    if (isNot) {
-      return { pass: false, message: () => `assert.step cannot be negated`, stack };
-    }
-    if (typeof str !== "string") {
-      return {
-        pass: false,
-        message: () => "assert.step requires a string",
-        stack,
-      };
-    }
-    this._steps = this._steps || [];
-    this._steps.push(str);
-    return {
-      pass: true,
-      message: () => `step: "${str}"`,
-    };
-  });
-
-  extendAssert("verifySteps", function ({ isNot, stack }, steps) {
-    if (isNot) {
-      return { pass: false, message: () => `assert.verifySteps cannot be negated`, stack };
-    }
-    const expectedSteps = this._steps || [];
-    let pass = true;
-    for (let i = 0; i < steps.length; i++) {
-      pass = pass && steps[i] === expectedSteps[i];
-    }
-    this._steps = [];
-    if (pass) {
-      return {
-        pass,
-        message: () => "steps are correct",
-      };
-    }
-
-    const formatList = (list) => "[" + list.map((elem) => `"${elem}"`).join(", ") + "]";
-    return {
-      pass,
-      message: () => "steps are not correct",
-      expected: formatList(expectedSteps),
-      value: formatList(steps),
-      stack,
-    };
-  });
-
-  // ---------------------------------------------------------------------------
-  // gTest main UI
-  // ---------------------------------------------------------------------------
-
-  const html = /* html */ `
-    <div class="gtest-runner">
-      <div class="gtest-panel">
-        <div class="gtest-panel-top">
-          <span class="gtest-logo">gTest</span>
-          <span class="gtest-useragent"></span>
-        </div>
-        <div class="gtest-panel-main">
-          <button class="gtest-btn gtest-abort">Start</button>
-          <button class="gtest-btn gtest-run-failed" disabled="disabled"><a href="">Run failed</a></button>
-          <button class="gtest-btn gtest-run-all"><a href="">Run all</a></button>
-          <div class="gtest-checkbox">
-            <input type="checkbox" id="gtest-hidepassed">
-            <label for="gtest-hidepassed">Hide passed tests</label>
-          </div>
-          <div class="gtest-checkbox">
-            <input type="checkbox" id="gtest-TestRunner.config.notrycatch">
-            <label for="gtest-TestRunner.config.notrycatch">No try/catch</label>
-          </div>
-          <div class="gtest-search">
-            <input placeholder="Filter suites, tests or tags" />
-            <button class="gtest-btn gtest-go" disabled="disabled">Go</button>
-          </div>
-        </div>
-        <div class="gtest-status">Ready
-        </div>
-      </div>
-      <div class="gtest-reporting"></div>
-    </div>`;
-
-  const style = /* css */ `
-    body {
-      margin: 0;
-    }
-
-    .gtest-runner {
-      font-family: sans-serif;
-      height: 100%;
-      display: grid;
-      grid-template-rows: 122px auto;
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      left: 0;
-      right: 0;
-    }
-
-    .gtest-panel {
-        background-color: #eeeeee;
-    }
-    .gtest-panel-top {
-      height: 45px;
-      padding-left: 8px;
-      padding-top: 4px;
-    }
-    .gtest-logo {
-      font-size: 30px;
-      font-weight: bold;
-      font-family: sans-serif;
-      color: #444444;
-      margin-left: 4px;
-    }
-
-    .gtest-btn {
-      height: 32px;
-      background-color:#768d87;
-      border-radius:4px;
-      border:1px solid #566963;
-      display:inline-block;
-      cursor:pointer;
-      color:#ffffff;
-      font-size:14px;
-      font-weight:bold;
-      padding:6px 12px;
-      text-decoration:none;
-      text-shadow:0px 1px 0px #2b665e;
-    }
-    .gtest-btn:hover {
-      background-color:#6c7c7c;
-    }
-    .gtest-btn:active {
-      position:relative;
-      top:1px;
-    }
-
-    .gtest-btn:disabled {
-      cursor: not-allowed;
-      opacity: 0.4;
-    }
-
-    .gtest-run-all, .gtest-run-failed {
-      padding: 0;
-    }
-
-    .gtest-run-all a, .gtest-run-failed a {
-      padding: 0px 12px;
-      line-height: 30px;
-      display: inline-block;
-      text-decoration: none;
-      color: white;
-    }
-
-    .gtest-panel-main {
-      height: 45px;
-      line-height: 45px;
-      padding-left: 8px;
-    }
-
-    .gtest-checkbox {
-      display: inline-block;
-      font-size: 15px;
-    }
-
-    .gtest-status {
-      background-color: #D2E0E6;
-      height: 28px;
-      line-height: 28px;
-      font-size: 13px;
-      padding-left: 12px;
-    }
-
-    .gtest-useragent {
-      font-size: 13px;
-      padding-right: 15px;
-      float: right;
-      margin: 15px 0;
-      color: #444444;
-    }
-
-    .gtest-circle {
-      display: inline-block;
-      height: 16px;
-      width: 16px;
-      border-radius: 8px;
-      position: relative;
-      top: 2px;
-    }
-
-    .gtest-darkred {
-      background-color: darkred;
-    }
-
-    .gtest-darkgreen {
-      background-color: darkgreen;
-    }
-
-    .gtest-darkorange {
-      background-color: darkorange;
-    }
-
-    .gtest-text-darkred {
-      color: darkred;
-    }
-
-    .gtest-text-darkgreen {
-      color: darkgreen;
-    }
-
-    .gtest-text-red {
-      color: #EE5757;
-    }
-
-    .gtest-text-green {
-      color: green;
-    }
-
-    .gtest-search {
-      float: right;
-      margin: 0 10px;
-      color: #333333;
-    }
-
-    .gtest-search > input {
-      height: 24px;
-      width: 450px;
-      outline: none;
-      border: 1px solid gray;
-      padding: 0 5px;
-    }
-
-    .gtest-dropdown {
-      position: absolute;
-      background-color: white;
-      border: 1px solid #9e9e9e;
-      width: 460px;
-      line-height: 28px;
-      font-size: 13px;
-    }
-
-    .gtest-dropdown-category {
-      font-weight: bold;
-      color: #333333;
-      padding: 0 5px;
-    }
-
-    .gtest-remove-category {
-      float: right;
-      color: gray;
-      padding: 0 6px;
-      cursor: pointer;
-    }
-
-    .gtest-remove-category:hover {
-      color: black;
-      background-color: #eeeeee;
-    }
-
-    .gtest-dropdown-line {
-      padding: 0 10px;
-    }
-
-    .gtest-dropdown-line:hover {
-      background-color: #f2f2f2;
-    }
-
-    .gtest-dropdown-line label {
-      padding: 5px;
-    }
-
-    .gtest-tag {
-      margin: 5px 3px;
-      background: darkcyan;
-      color: white;
-      padding: 2px 5px;
-      font-size: 12px;
-      font-weight: bold;
-      border-radius: 7px;
-    }
-
-    .gtest-reporting {
-      padding-left: 20px;
-      font-size: 13px;
-      overflow: auto;
-    }
-
-    .gtest-reporting.gtest-hidepassed .gtest-result:not(.gtest-fail) {
-      display: none;
-    }
-
-    .gtest-fixture {
-      position: absolute;
-      top: 124px;
-      left: 0;
-      right: 0;
-      bottom: 0;        
-    }
-
-    .gtest-result {
-      border-bottom: 1px solid lightgray;
-    }
-
-    .gtest-result.gtest-skip {
-      background-color: bisque;
-    }
-
-    .gtest-result-line {
-      margin: 5px;
-    }
-
-    .gtest-result-header {
-      padding: 0 12px;
-      cursor: default;
-      line-height: 27px;
-    }
-
-    .gtest-result-header a {
-      text-decoration: none;
-    }
-
-    .gtest-result-header .gtest-circle {
-      margin-right: 5px;
-    }
-    .gtest-result-header .gtest-open {
-      padding: 4px;
-      color: #C2CCD1;
-      padding-right: 50px;
-    }
-
-    .gtest-result-header .gtest-open:hover {
-      font-weight: bold;
-      color: black;
-    }
-
-    .gtest-result-detail {
-      padding-left: 40px;
-    }
-
-    .gtest-info-line {
-      display: grid;
-      grid-template-columns: 80px auto;
-      column-gap: 10px;
-      margin: 4px;
-    }
-
-    .gtest-info-line-left > span {
-      font-weight: bold;
-      float: right;
-    }
-
-    .gtest-stack {
-      font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      margin: 3px;
-      font-size: 12px;
-      line-height: 18px;  
-      color: #091124;
-    }
-
-    .gtest-fail {
-      background-color: #fff0f0;
-    }
-
-    .gtest-name {
-      color: #366097;
-      font-weight: 700;
-      cursor: pointer;
-      padding: 2px 4px;
-    }
-    .gtest-cell {
-      padding: 2px;
-      font-weight: bold;
-    }
-
-    .gtest-cell a {
-      color: #444444;
-    }
-
-    .gtest-cell a, .gtest-name {
-      user-select: text;
-    }
-
-    .gtest-duration {
-      float: right;
-      font-size: smaller;
-      color: gray;
-    }`;
-
-  async function setupGTest(runner) {
-    // -------------------------------------------------------------------------
-    // main setup code
-    // -------------------------------------------------------------------------
-
-    const bus = runner.bus;
-
-    const queryParams = new URLSearchParams(location.search);
-    TestRunner.config.notrycatch = queryParams.has("notrycatch");
-
-    const tag = queryParams.get("tag");
-    if (tag) {
-      runner.addFilter({ tag });
-    }
-    const filter = queryParams.get("filter");
-    if (filter) {
-      runner.addFilter({ text: filter });
-    }
-    const skipParam = queryParams.get("skip");
-    if (skipParam) {
-      for (let skip of skipParam.split(",")) {
-        runner.addFilter({ skip });
-      }
-    }
-
-    const hasTestId = queryParams.has("testId");
-    const hasSuiteId = queryParams.has("suiteId");
-
-    const previousFails = sessionStorage.getItem("gtest-failed-tests");
-    if (previousFails) {
-      sessionStorage.removeItem("gtest-failed-tests");
-      const tests = previousFails.split(",");
-      for (let fail of tests) {
-        runner.addFilter({ hash: fail });
-      }
-    } else if (hasTestId) {
-      for (let hash of queryParams.getAll("testId")) {
-        runner.addFilter({ hash });
-      }
-    } else if (hasSuiteId) {
-      for (let hash of queryParams.getAll("suiteId")) {
-        runner.addFilter({ hash });
-      }
-    }
-
-    // -------------------------------------------------------------------------
-    // internal state stuff
-    // -------------------------------------------------------------------------
-
-    let suiteNumber = 0;
-    let testNumber = 0;
-    let failedTestNumber = 0;
-    let skippedTestNumber = 0;
-    let doneTestNumber = 0;
-    let tests = {};
-    let testIndex = 1;
-    let failedTests = [];
-    let didShowDetail = false;
-    let hidePassed = queryParams.has("hidepassed");
-
-    bus.addEventListener("test-added", () => testNumber++);
-    bus.addEventListener("suite-added", () => suiteNumber++);
-    bus.addEventListener("skipped-test", () => skippedTestNumber++);
-    bus.addEventListener("after-test", (ev) => {
-      const test = ev.detail;
-      doneTestNumber++;
-      if (!test.pass) {
-        failedTestNumber++;
-        failedTests.push(test.hash);
-      }
-    });
-
-    await domReady;
-    if (TestRunner.config.autostart) {
-      runner.start();
-    }
-
-    // -------------------------------------------------------------------------
-    // main rendering
-    // -------------------------------------------------------------------------
-
-    const div = document.createElement("div");
-    div.innerHTML = html;
-    div.querySelector(".gtest-useragent").innerText = userAgent;
-    document.body.prepend(...div.children);
-    const sheet = document.createElement("style");
-    sheet.innerHTML = style;
-    document.head.appendChild(sheet);
-
-    // -------------------------------------------------------------------------
-    // abort button
-    // -------------------------------------------------------------------------
+  function setupAbortButton(runner) {
     const abortBtn = document.querySelector(".gtest-abort");
     abortBtn.addEventListener("click", () => {
       if (runner.status === "ready") {
@@ -1195,46 +616,21 @@
       }
     });
 
-    bus.addEventListener("before-all", () => {
+    runner.bus.addEventListener("before-all", () => {
       abortBtn.textContent = "Abort";
     });
 
-    bus.addEventListener("after-all", () => {
+    runner.bus.addEventListener("after-all", () => {
       abortBtn.setAttribute("disabled", "disabled");
     });
+  }
 
-    // -------------------------------------------------------------------------
-    // run failed button
-    // -------------------------------------------------------------------------
-    const runFailedBtn = document.querySelector(".gtest-run-failed");
-    const runFailedLink = document.querySelector(".gtest-run-failed a");
-    runFailedLink.setAttribute("href", location.href);
-    runFailedLink.addEventListener("click", () => {
-      sessionStorage.setItem("gtest-failed-tests", failedTests.toString());
-    });
+  const history$2 = window.history;
 
-    bus.addEventListener("after-all", () => {
-      if (failedTests.length) {
-        runFailedBtn.removeAttribute("disabled");
-      }
-    });
+  function setupHidePassedcheckbox() {
+    const queryParams = new URLSearchParams(location.search);
+    let hidePassed = queryParams.has("hidepassed");
 
-    // -------------------------------------------------------------------------
-    // run all button
-    // -------------------------------------------------------------------------
-    const runLink = document.querySelector(".gtest-run-all a");
-    const search = location.search;
-    const params = new URLSearchParams(search);
-    params.delete("testId");
-    params.delete("suiteId");
-    params.delete("tag");
-    params.delete("filter");
-    const href = getUrlWithParams(params);
-    runLink.setAttribute("href", href);
-
-    // -------------------------------------------------------------------------
-    // hide passed checkbox
-    // -------------------------------------------------------------------------
     const hidePassedCheckbox = document.getElementById("gtest-hidepassed");
     const reporting = document.querySelector(".gtest-reporting");
     if (hidePassed) {
@@ -1255,14 +651,49 @@
         params.delete("hidepassed");
       }
       const newurl = getUrlWithParams(params);
-      history.replaceState({ path: newurl }, "", newurl);
+      history$2.replaceState({ path: newurl }, "", newurl);
     }
+  }
 
+  const html = /* html */ `
+    <div class="gtest-runner">
+    <div class="gtest-panel">
+        <div class="gtest-panel-top">
+        <span class="gtest-logo">gTest</span>
+        <span class="gtest-useragent"></span>
+        </div>
+        <div class="gtest-panel-main">
+        <button class="gtest-btn gtest-abort">Start</button>
+        <button class="gtest-btn gtest-run-failed" disabled="disabled"><a href="">Run failed</a></button>
+        <button class="gtest-btn gtest-run-all"><a href="">Run all</a></button>
+        <div class="gtest-checkbox">
+            <input type="checkbox" id="gtest-hidepassed">
+            <label for="gtest-hidepassed">Hide passed tests</label>
+        </div>
+        <div class="gtest-checkbox">
+            <input type="checkbox" id="gtest-notrycatch">
+            <label for="gtest-notrycatch">No try/catch</label>
+        </div>
+        <div class="gtest-search">
+            <input placeholder="Filter suites, tests or tags" />
+            <button class="gtest-btn gtest-go" disabled="disabled">Go</button>
+        </div>
+        </div>
+        <div class="gtest-status">Ready
+        </div>
+    </div>
+    <div class="gtest-reporting"></div>
+    </div>`;
+
+  const history$1 = window.history;
+  const location$3 = window.location;
+
+  function setupNoTryCatchCheckbox() {
     // -------------------------------------------------------------------------
     // no try/catch checkbox
     // -------------------------------------------------------------------------
-    const notrycatchCheckbox = document.getElementById("gtest-TestRunner.config.notrycatch");
-    if (TestRunner.config.notrycatch) {
+    const notrycatchCheckbox = document.getElementById("gtest-notrycatch");
+    if (config.notrycatch) {
       notrycatchCheckbox.checked = true;
     }
 
@@ -1271,51 +702,73 @@
     });
 
     function toggleNoTryCatch() {
-      const params = new URLSearchParams(location.search);
-      if (!TestRunner.config.notrycatch) {
+      const params = new URLSearchParams(location$3.search);
+      if (!config.notrycatch) {
         params.set("notrycatch", "1");
       } else {
         params.delete("notrycatch");
       }
       const newurl = getUrlWithParams(params);
-      history.replaceState({ path: newurl }, "", newurl);
-      location.reload();
+      history$1.replaceState({ path: newurl }, "", newurl);
+      location$3.reload();
     }
+  }
 
-    // -------------------------------------------------------------------------
-    // status panel
-    // -------------------------------------------------------------------------
-    const statusPanel = document.querySelector(".gtest-status");
-    function setStatusContent(content) {
-      statusPanel.innerHTML = content;
-    }
+  function setupRunAllButton() {
+    const runLink = document.querySelector(".gtest-run-all a");
+    const search = location.search;
+    const params = new URLSearchParams(search);
+    params.delete("testId");
+    params.delete("suiteId");
+    params.delete("tag");
+    params.delete("filter");
+    const href = getUrlWithParams(params);
+    runLink.setAttribute("href", href);
+  }
 
-    let start;
-    bus.addEventListener("before-all", () => (start = Date.now()));
+  function setupRunFailedButton(runner) {
+    let failedTests = [];
 
-    bus.addEventListener("before-test", (ev) => {
-      const { description, parent } = ev.detail;
-      const fullPath = (parent ? parent.path : []).concat(description).join(" > ");
-      setStatusContent(`Running: ${fullPath}`);
+    const runFailedBtn = document.querySelector(".gtest-run-failed");
+    const runFailedLink = document.querySelector(".gtest-run-failed a");
+    runFailedLink.setAttribute("href", location.href);
+    runFailedLink.addEventListener("click", () => {
+      sessionStorage.setItem("gtest-failed-tests", failedTests.toString());
     });
 
-    bus.addEventListener("after-all", () => {
-      const statusCls = failedTestNumber === 0 ? "gtest-darkgreen" : "gtest-darkred";
-      const msg = `${doneTestNumber} test(s) completed`;
-      const hasFilter = runner.hasFilter;
-      const suiteInfo = hasFilter ? "" : ` in ${suiteNumber} suites`;
-
-      const errors = failedTestNumber ? `, with ${failedTestNumber} failed` : "";
-
-      const skipped = skippedTestNumber ? `, with ${skippedTestNumber} skipped` : "";
-      const timeInfo = ` (total time: ${Date.now() - start} ms)`;
-      const status = `<span class="gtest-circle ${statusCls}"></span> ${msg}${suiteInfo}${skipped}${errors}${timeInfo}`;
-      setStatusContent(status);
+    runner.bus.addEventListener("after-test", (ev) => {
+      const test = ev.detail;
+      if (!test.pass) {
+        failedTests.push(test.hash);
+      }
     });
 
-    // -------------------------------------------------------------------------
-    // search input/dropdown
-    // -------------------------------------------------------------------------
+    runner.bus.addEventListener("after-all", () => {
+      if (failedTests.length) {
+        runFailedBtn.removeAttribute("disabled");
+      }
+    });
+  }
+
+  const location$2 = window.location;
+
+  /**
+   * @param {URLSearchParams} params
+   */
+  function toggleMultiParam(params, active, key, value) {
+    const values = params.getAll(key);
+    params.delete(key);
+    for (let val of values) {
+      if (val !== value) {
+        params.append(key, val);
+      }
+    }
+    if (active) {
+      params.append(key, value);
+    }
+  }
+
+  function setupSearch(runner) {
     const searchDiv = document.querySelector(".gtest-search");
     const searchInput = searchDiv.querySelector(".gtest-search input");
     const searchButton = searchDiv.querySelector(".gtest-search button");
@@ -1342,7 +795,7 @@
     searchButton.addEventListener("click", activateFilter);
 
     function activateFilter() {
-      const params = new URLSearchParams(location.search);
+      const params = new URLSearchParams(location$2.search);
       if (!hasJustSelected) {
         const filter = searchInput.value.trim();
         if (filter) {
@@ -1351,7 +804,7 @@
           params.delete("filter");
         }
       }
-      location.href = getUrlWithParams(params);
+      location$2.href = getUrlWithParams(params);
     }
 
     function findSuggestions(str) {
@@ -1371,7 +824,7 @@
       const id = `gtest-${checkboxId++}`;
       return `
         <div class="gtest-dropdown-line">
-          <input type="checkbox" id="${id}" data-${attr}="${value}"/><label for="${id}">${str}</label>
+        <input type="checkbox" id="${id}" data-${attr}="${value}"/><label for="${id}">${str}</label>
         </div>`;
     }
 
@@ -1428,7 +881,7 @@
       if (ev.target.matches(".gtest-dropdown input")) {
         hasJustSelected = true;
         const input = ev.target;
-        const params = new URLSearchParams(location.search);
+        const params = new URLSearchParams(location$2.search);
         const test = input.dataset.test;
         if (test) {
           toggleMultiParam(params, input.checked, "testId", test);
@@ -1450,7 +903,7 @@
     searchDiv.addEventListener("click", (ev) => {
       const category = ev.target.dataset.category;
       if (category) {
-        const params = new URLSearchParams(location.search);
+        const params = new URLSearchParams(location$2.search);
         params.delete(category);
         const url = getUrlWithParams(params);
         history.replaceState({ path: url }, "", url);
@@ -1463,10 +916,369 @@
         searchDropdown = null;
       }
     });
+  }
 
-    // -------------------------------------------------------------------------
-    // test result reporting
-    // -------------------------------------------------------------------------
+  function setupStatusPanel(runner) {
+    const bus = runner.bus;
+
+    const statusPanel = document.querySelector(".gtest-status");
+    function setStatusContent(content) {
+      statusPanel.innerHTML = content;
+    }
+
+    let start;
+    bus.addEventListener("before-all", () => (start = Date.now()));
+
+    bus.addEventListener("before-test", (ev) => {
+      const { description, parent } = ev.detail;
+      const fullPath = (parent ? parent.path : []).concat(description).join(" > ");
+      setStatusContent(`Running: ${fullPath}`);
+    });
+
+    bus.addEventListener("after-all", () => {
+      const { failedTestNumber, doneTestNumber, suiteNumber, skippedTestNumber } = runner;
+      const statusCls = failedTestNumber === 0 ? "gtest-darkgreen" : "gtest-darkred";
+      const msg = `${doneTestNumber} test(s) completed`;
+      const hasFilter = runner.hasFilter;
+      const suiteInfo = hasFilter ? "" : ` in ${suiteNumber} suites`;
+
+      const errors = failedTestNumber ? `, with ${failedTestNumber} failed` : "";
+
+      const skipped = skippedTestNumber ? `, with ${skippedTestNumber} skipped` : "";
+      const timeInfo = ` (total time: ${Date.now() - start} ms)`;
+      const status = `<span class="gtest-circle ${statusCls}"></span> ${msg}${suiteInfo}${skipped}${errors}${timeInfo}`;
+      setStatusContent(status);
+    });
+  }
+
+  const style = /* css */ `
+body {
+    margin: 0;
+}
+
+.gtest-runner {
+    font-family: sans-serif;
+    height: 100%;
+    display: grid;
+    grid-template-rows: 122px auto;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+}
+
+.gtest-panel {
+    background-color: #eeeeee;
+}
+
+.gtest-panel-top {
+    height: 45px;
+    padding-left: 8px;
+    padding-top: 4px;
+}
+
+.gtest-logo {
+    font-size: 30px;
+    font-weight: bold;
+    font-family: sans-serif;
+    color: #444444;
+    margin-left: 4px;
+}
+
+.gtest-btn {
+    height: 32px;
+    background-color:#768d87;
+    border-radius:4px;
+    border:1px solid #566963;
+    display:inline-block;
+    cursor:pointer;
+    color:#ffffff;
+    font-size:14px;
+    font-weight:bold;
+    padding:6px 12px;
+    text-decoration:none;
+    text-shadow:0px 1px 0px #2b665e;
+}
+
+.gtest-btn:hover {
+    background-color:#6c7c7c;
+}
+
+.gtest-btn:active {
+    position:relative;
+    top:1px;
+}
+
+.gtest-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+}
+
+.gtest-run-all, .gtest-run-failed {
+    padding: 0;
+}
+
+.gtest-run-all a, .gtest-run-failed a {
+    padding: 0px 12px;
+    line-height: 30px;
+    display: inline-block;
+    text-decoration: none;
+    color: white;
+}
+
+.gtest-panel-main {
+    height: 45px;
+    line-height: 45px;
+    padding-left: 8px;
+}
+
+.gtest-checkbox {
+    display: inline-block;
+    font-size: 15px;
+}
+
+.gtest-status {
+    background-color: #D2E0E6;
+    height: 28px;
+    line-height: 28px;
+    font-size: 13px;
+    padding-left: 12px;
+}
+
+.gtest-useragent {
+    font-size: 13px;
+    padding-right: 15px;
+    float: right;
+    margin: 15px 0;
+    color: #444444;
+}
+
+.gtest-circle {
+    display: inline-block;
+    height: 16px;
+    width: 16px;
+    border-radius: 8px;
+    position: relative;
+    top: 2px;
+}
+
+.gtest-darkred {
+    background-color: darkred;
+}
+
+.gtest-darkgreen {
+    background-color: darkgreen;
+}
+
+.gtest-darkorange {
+    background-color: darkorange;
+}
+
+.gtest-text-darkred {
+    color: darkred;
+}
+
+.gtest-text-darkgreen {
+color: darkgreen;
+}
+
+.gtest-text-red {
+    color: #EE5757;
+}
+
+.gtest-text-green {
+    color: green;
+}
+
+.gtest-search {
+    float: right;
+    margin: 0 10px;
+    color: #333333;
+}
+
+.gtest-search > input {
+    height: 24px;
+    width: 450px;
+    outline: none;
+    border: 1px solid gray;
+    padding: 0 5px;
+}
+
+.gtest-dropdown {
+    position: absolute;
+    background-color: white;
+    border: 1px solid #9e9e9e;
+    width: 460px;
+    line-height: 28px;
+    font-size: 13px;
+}
+
+.gtest-dropdown-category {
+    font-weight: bold;
+    color: #333333;
+    padding: 0 5px;
+}
+
+.gtest-remove-category {
+    float: right;
+    color: gray;
+    padding: 0 6px;
+    cursor: pointer;
+}
+
+.gtest-remove-category:hover {
+    color: black;
+    background-color: #eeeeee;
+}
+
+.gtest-dropdown-line {
+    padding: 0 10px;
+}
+
+.gtest-dropdown-line:hover {
+    background-color: #f2f2f2;
+}
+
+.gtest-dropdown-line label {
+    padding: 5px;
+}
+
+.gtest-tag {
+    margin: 5px 3px;
+    background: darkcyan;
+    color: white;
+    padding: 2px 5px;
+    font-size: 12px;
+    font-weight: bold;
+    border-radius: 7px;
+}
+
+.gtest-reporting {
+    padding-left: 20px;
+    font-size: 13px;
+    overflow: auto;
+}
+
+.gtest-reporting.gtest-hidepassed .gtest-result:not(.gtest-fail) {
+    display: none;
+}
+
+.gtest-fixture {
+    position: absolute;
+    top: 124px;
+    left: 0;
+    right: 0;
+    bottom: 0;        
+}
+
+.gtest-result {
+    border-bottom: 1px solid lightgray;
+}
+
+.gtest-result.gtest-skip {
+    background-color: bisque;
+}
+
+.gtest-result-line {
+    margin: 5px;
+}
+
+.gtest-result-header {
+    padding: 0 12px;
+    cursor: default;
+    line-height: 27px;
+}
+
+.gtest-result-header a {
+    text-decoration: none;
+}
+
+.gtest-result-header .gtest-circle {
+    margin-right: 5px;
+}
+
+.gtest-result-header .gtest-open {
+    padding: 4px;
+    color: #C2CCD1;
+    padding-right: 50px;
+}
+
+.gtest-result-header .gtest-open:hover {
+    font-weight: bold;
+    color: black;
+}
+
+.gtest-result-detail {
+    padding-left: 40px;
+}
+
+.gtest-info-line {
+    display: grid;
+    grid-template-columns: 80px auto;
+    column-gap: 10px;
+    margin: 4px;
+}
+
+.gtest-info-line-left > span {
+    font-weight: bold;
+    float: right;
+}
+
+.gtest-stack {
+    font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    margin: 3px;
+    font-size: 12px;
+    line-height: 18px;  
+    color: #091124;
+}
+
+.gtest-fail {
+    background-color: #fff0f0;
+}
+
+.gtest-name {
+    color: #366097;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 2px 4px;
+}
+
+.gtest-cell {
+    padding: 2px;
+    font-weight: bold;
+}
+
+.gtest-cell a {
+    color: #444444;
+}
+
+.gtest-cell a, .gtest-name {
+    user-select: text;
+}
+
+.gtest-duration {
+    float: right;
+    font-size: smaller;
+    color: gray;
+}`;
+
+  const userAgent$1 = navigator.userAgent;
+  const isFirefox = userAgent$1.includes("Firefox");
+
+  function formatStack(stack) {
+    return isFirefox ? stack : stack.toString().split("\n").slice(1).join("\n");
+  }
+
+  function setupTestResult(runner) {
+    const bus = runner.bus;
+
+    let tests = {};
+    let testIndex = 1;
+    let didShowDetail = false;
+
+    const reporting = document.querySelector(".gtest-reporting");
+
     bus.addEventListener("after-test", (ev) => {
       addTestResult(ev.detail);
     });
@@ -1541,7 +1353,7 @@
       reporting.appendChild(div);
 
       if (!test.pass) {
-        const showDetailConfig = TestRunner.config.showDetail;
+        const showDetailConfig = config.showDetail;
         const shouldShowDetail =
           showDetailConfig === "failed" || (showDetailConfig === "first-fail" && !didShowDetail);
         if (shouldShowDetail) {
@@ -1622,14 +1434,6 @@
       }
     }
 
-    function makeEl(tag, classes) {
-      const elem = document.createElement(tag);
-      for (let cl of classes) {
-        elem.classList.add(cl);
-      }
-      return elem;
-    }
-
     // -------------------------------------------------------------------------
     // reporting skipped tests
     // -------------------------------------------------------------------------
@@ -1638,12 +1442,84 @@
       const testInfo = getTestInfo(ev.detail);
       div.innerHTML = `
         <div class="gtest-result-header">
-          <span class="gtest-circle gtest-darkorange"></span>
-          ${testInfo}
-          <span>(skipped)</span>
+        <span class="gtest-circle gtest-darkorange"></span>
+        ${testInfo}
+        <span>(skipped)</span>
         </div>`;
       reporting.appendChild(div);
     });
+  }
+
+  // in case some testing code decides to mock them
+  const location$1 = window.location;
+  const userAgent = navigator.userAgent;
+
+  async function setupUI(runner) {
+    const bus = runner.bus;
+
+    const queryParams = new URLSearchParams(location$1.search);
+    config.notrycatch = queryParams.has("notrycatch");
+
+    const tag = queryParams.get("tag");
+    if (tag) {
+      runner.addFilter({ tag });
+    }
+    const filter = queryParams.get("filter");
+    if (filter) {
+      runner.addFilter({ text: filter });
+    }
+    const skipParam = queryParams.get("skip");
+    if (skipParam) {
+      for (let skip of skipParam.split(",")) {
+        runner.addFilter({ skip });
+      }
+    }
+
+    const hasTestId = queryParams.has("testId");
+    const hasSuiteId = queryParams.has("suiteId");
+
+    const previousFails = sessionStorage.getItem("gtest-failed-tests");
+    if (previousFails) {
+      sessionStorage.removeItem("gtest-failed-tests");
+      const tests = previousFails.split(",");
+      for (let fail of tests) {
+        runner.addFilter({ hash: fail });
+      }
+    } else if (hasTestId) {
+      for (let hash of queryParams.getAll("testId")) {
+        runner.addFilter({ hash });
+      }
+    } else if (hasSuiteId) {
+      for (let hash of queryParams.getAll("suiteId")) {
+        runner.addFilter({ hash });
+      }
+    }
+
+    await domReady;
+    if (config.autostart) {
+      runner.start();
+    }
+
+    // -------------------------------------------------------------------------
+    // main rendering
+    // -------------------------------------------------------------------------
+
+    const div = document.createElement("div");
+    div.innerHTML = html;
+    div.querySelector(".gtest-useragent").innerText = userAgent;
+    document.body.prepend(...div.children);
+    const sheet = document.createElement("style");
+    sheet.innerHTML = style;
+    document.head.appendChild(sheet);
+
+    setupAbortButton(runner);
+    setupRunFailedButton(runner);
+    setupRunAllButton();
+    setupHidePassedcheckbox();
+    setupNoTryCatchCheckbox();
+    setupStatusPanel(runner);
+    setupSearch(runner);
+    setupTestResult(runner);
 
     // -------------------------------------------------------------------------
     // misc ui polish
@@ -1651,7 +1527,7 @@
 
     // display a X in title if test run failed
     bus.addEventListener("after-all", () => {
-      if (failedTestNumber > 0) {
+      if (runner.failedTestNumber > 0) {
         document.title = `✖ ${document.title}`;
       }
     });
@@ -1659,14 +1535,14 @@
     // force reload on links even when location did not change
     document.querySelector(".gtest-runner").addEventListener("click", (ev) => {
       if (ev.target.matches("a")) {
-        if (location.search === search) {
-          location.reload();
+        if (location$1.search === search) {
+          location$1.reload();
         }
       }
     });
 
     // prevent navigation on a link when there is some active selection
-    reporting.addEventListener("click", (ev) => {
+    document.querySelector(".gtest-reporting").addEventListener("click", (ev) => {
       if (ev.target.tagName === "A") {
         const selection = window.getSelection();
         if (
@@ -1681,72 +1557,24 @@
     });
   }
 
-  function makeAPI(runner) {
-    function getFixture() {
-      const div = document.createElement("div");
-      div.classList.add("gtest-fixture");
-      document.body.appendChild(div);
-      afterTest(() => div.remove());
-      return div;
-    }
-
-    function beforeSuite(callback) {
-      if (!runner.current) {
-        throw new Error(`"beforeSuite" should only be called inside a suite definition`);
-      }
-      runner.current.beforeFns.push(callback);
-    }
-
-    function beforeEach(callback) {
-      if (!runner.current) {
-        runner.beforeEachTestFns.push(callback);
+  /**
+   * Very specific function: it takes a base function, a name of a property,
+   * and defines base[name] that has the same signature, except that it injects
+   * some options as the second last argument
+   */
+  function defineSubFunction(base, name, optionsFn) {
+    base[name] = function (...args) {
+      const secondLast = args[args.length - 2];
+      if (typeof secondLast === "object") {
+        optionsFn(secondLast);
       } else {
-        runner.current.beforeEachFns.push(callback);
+        args.splice(args.length - 1, 0, optionsFn({}));
       }
-    }
+      base(...args);
+    };
+  }
 
-    const testCleanupFns = [];
-
-    runner.bus.addEventListener("after-test", async () => {
-      while (testCleanupFns.length) {
-        const fn = testCleanupFns.pop();
-        try {
-          await fn();
-        } catch (e) {
-          console.error(e);
-        }
-      }
-    });
-
-    function afterTest(callback) {
-      testCleanupFns.push(callback);
-    }
-
-    const suiteCleanupStack = [];
-
-    runner.bus.addEventListener("before-suite", () => {
-      suiteCleanupStack.push([]);
-    });
-
-    runner.bus.addEventListener("after-suite", async () => {
-      const fns = suiteCleanupStack.pop();
-      while (fns.length) {
-        try {
-          await fns.pop()();
-        } catch (e) {
-          console.error(e);
-        }
-      }
-    });
-
-    function afterSuite(callback) {
-      const fns = suiteCleanupStack[suiteCleanupStack.length - 1];
-      if (!fns) {
-        throw new Error(`"afterSuite" can only be called when a suite is currently running`);
-      }
-      fns.push(callback);
-    }
-
+  function suiteFactory(runner) {
     /**
      * @param {any} description
      * @param {{ (): void; (): void; }} [cb]
@@ -1764,30 +1592,18 @@
         runner.addSuite(description, cb, options);
       }
     }
+    defineSubFunction(suite, "only", (options) => Object.assign(options, { only: true }));
+    defineSubFunction(suite, "skip", (options) => Object.assign(options, { skip: true }));
+    return suite;
+  }
 
-    /**
-     * Very specific function: it takes a base function, a name of a property,
-     * and defines base[name] that has the same signature, except that it injects
-     * some options as the second last argument
-     */
-    function defineSubFunction(base, name, optionsFn) {
-      base[name] = function (...args) {
-        const secondLast = args[args.length - 2];
-        if (typeof secondLast === "object") {
-          optionsFn(secondLast);
-        } else {
-          args.splice(args.length - 1, 0, optionsFn({}));
-        }
-        base(...args);
-      };
-    }
-
+  function testFactory(runner) {
     /**
      * @param {string} description
      * @param {(assert: Assert) => void | Promise<void>} runTest
      */
     function test(description, options, runTest) {
-      if (TestRunner.config.noStandaloneTest && !runner.current) {
+      if (config.noStandaloneTest && !runner.current) {
         throw new Error(
           "Test runner is setup to refuse standalone tests. Please add a surrounding 'suite' statement."
         );
@@ -1799,33 +1615,245 @@
       runner.addTest(description, runTest, options);
     }
 
-    defineSubFunction(suite, "only", (options) => Object.assign(options, { only: true }));
     defineSubFunction(test, "only", (options) => Object.assign(options, { only: true }));
-    defineSubFunction(suite, "skip", (options) => Object.assign(options, { skip: true }));
     defineSubFunction(test, "skip", (options) => Object.assign(options, { skip: true }));
     defineSubFunction(test, "debug", (options) =>
       Object.assign(options, { only: true, debug: true })
     );
+    return test;
+  }
 
-    async function start() {
-      runner.start();
-    }
-    return {
-      suite,
-      test,
-      start,
-      getFixture,
-      beforeSuite,
-      afterSuite,
-      beforeEach,
-      afterTest,
+  function fixtureFactory(afterTest) {
+    return function getFixture() {
+      const div = document.createElement("div");
+      div.classList.add("gtest-fixture");
+      document.body.appendChild(div);
+      afterTest(() => div.remove());
+      return div;
     };
   }
 
-  // setup
+  function afterSuiteFactory(runner) {
+    const suiteCleanupStack = [];
+
+    runner.bus.addEventListener("before-suite", () => {
+      suiteCleanupStack.push([]);
+    });
+
+    runner.bus.addEventListener("after-suite", async () => {
+      const fns = suiteCleanupStack.pop();
+      while (fns.length) {
+        try {
+          await fns.pop()();
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    });
+
+    return function afterSuite(callback) {
+      const fns = suiteCleanupStack[suiteCleanupStack.length - 1];
+      if (!fns) {
+        throw new Error(`"afterSuite" can only be called when a suite is currently running`);
+      }
+      fns.push(callback);
+    };
+  }
+
+  function afterTestFactory(runner) {
+    const testCleanupFns = [];
+
+    runner.bus.addEventListener("after-test", async () => {
+      while (testCleanupFns.length) {
+        const fn = testCleanupFns.pop();
+        try {
+          await fn();
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    });
+
+    return function afterTest(callback) {
+      testCleanupFns.push(callback);
+    };
+  }
+
+  function beforeEachFactory(runner) {
+    return function beforeEach(callback) {
+      if (!runner.current) {
+        runner.beforeEachTestFns.push(callback);
+      } else {
+        runner.current.beforeEachFns.push(callback);
+      }
+    };
+  }
+
+  function beforeSuiteFactory(runner) {
+    return function beforeSuite(callback) {
+      if (!runner.current) {
+        throw new Error(`"beforeSuite" should only be called inside a suite definition`);
+      }
+      runner.current.beforeFns.push(callback);
+    };
+  }
+
+  Assert.extend("deepEqual", ({ isNot, stack, applyModifier }, value, expected) => {
+    const pass = applyModifier(deepEqual(value, expected));
+    if (pass) {
+      const message = () => `values are ${isNot ? "not " : ""}deep equal`;
+      return { pass, message };
+    } else {
+      const message = () => `expected values ${isNot ? "not " : ""}to be deep equal`;
+      return {
+        pass,
+        message,
+        expected,
+        value,
+        stack,
+      };
+    }
+  });
+
+  Assert.extend("equal", ({ isNot, stack, applyModifier }, value, expected) => {
+    const pass = applyModifier(value === expected);
+    if (pass) {
+      const message = () => `values are ${isNot ? "not " : ""}equal`;
+      return { pass, message };
+    } else {
+      const message = () => `expected values ${isNot ? "not " : ""}to be equal`;
+      return {
+        pass,
+        message,
+        expected,
+        value,
+        stack,
+      };
+    }
+  });
+
+  Assert.extend("ok", ({ isNot, stack, applyModifier }, value) => {
+    const pass = applyModifier(value);
+    if (pass) {
+      const message = () => `value is ${isNot ? "not " : ""}truthy`;
+      return { pass, message };
+    } else {
+      const message = () => `expected value ${isNot ? "not " : ""}to be truthy`;
+      return {
+        pass,
+        message,
+        value,
+        stack,
+      };
+    }
+  });
+
+  Assert.extend("step", function ({ isNot, stack }, str) {
+    if (isNot) {
+      return { pass: false, message: () => `assert.step cannot be negated`, stack };
+    }
+    if (typeof str !== "string") {
+      return {
+        pass: false,
+        message: () => "assert.step requires a string",
+        stack,
+      };
+    }
+    this._steps = this._steps || [];
+    this._steps.push(str);
+    return {
+      pass: true,
+      message: () => `step: "${str}"`,
+    };
+  });
+
+  Assert.extend("throws", ({ isNot, stack }, fn, matcher = Error) => {
+    if (!(typeof fn === "function")) {
+      return {
+        pass: false,
+        message: () => "assert.throws requires a function as first argument",
+        stack,
+      };
+    }
+    const shouldThrow = !isNot;
+
+    try {
+      fn();
+    } catch (e) {
+      if (shouldThrow) {
+        const message = () => `expected function not to throw`;
+        return {
+          pass: false,
+          message,
+          stack,
+        };
+      }
+      const pass = matcher instanceof RegExp ? e.message.match(matcher) : e instanceof matcher;
+      if (pass) {
+        const message = () => `function did throw`;
+        return { pass, message };
+      } else {
+        const message = () => `function did throw, but error is not valid`;
+        return {
+          pass,
+          message,
+          stack,
+        };
+      }
+    }
+    if (!shouldThrow) {
+      const message = () => `function did not throw`;
+      return { pass: true, message };
+    } else {
+      const message = () => `expected function to throw`;
+      return {
+        pass: false,
+        message,
+        stack,
+      };
+    }
+  });
+
+  function formatList(list) {
+    return "[" + list.map((elem) => `"${elem}"`).join(", ") + "]";
+  }
+
+  Assert.extend("verifySteps", function ({ isNot, stack }, steps) {
+    if (isNot) {
+      return { pass: false, message: () => `assert.verifySteps cannot be negated`, stack };
+    }
+    const expectedSteps = this._steps || [];
+    let pass = true;
+    for (let i = 0; i < steps.length; i++) {
+      pass = pass && steps[i] === expectedSteps[i];
+    }
+    this._steps = [];
+    if (pass) {
+      return {
+        pass,
+        message: () => "steps are correct",
+      };
+    }
+
+    return {
+      pass,
+      message: () => "steps are not correct",
+      expected: formatList(expectedSteps),
+      value: formatList(steps),
+      stack,
+    };
+  });
+
   const runner = new TestRunner();
-  setupGTest(runner);
-  const exportedAPI = makeAPI(runner);
+  const beforeEach = beforeEachFactory(runner);
+  const beforeSuite = beforeSuiteFactory(runner);
+  const afterSuite = afterSuiteFactory(runner);
+  const afterTest = afterTestFactory(runner);
+  const getFixture = fixtureFactory(afterTest);
+  const suite = suiteFactory(runner);
+  const test = testFactory(runner);
+
+  setupUI(runner);
 
   window.gTest = {
     __debug__: {
@@ -1835,7 +1863,16 @@
     __info__: {
       version: "0.9",
     },
-    config: TestRunner.config,
-    ...exportedAPI,
+    config,
+    beforeSuite: beforeSuite,
+    beforeEach: beforeEach,
+    afterTest: afterTest,
+    afterSuite,
+    start: runner.start.bind(runner),
+    suite,
+    test,
+    getFixture,
+    extend: Assert.extend,
   };
-})();
+
+}());

@@ -5,7 +5,9 @@
   "author": "Gery Debongnie",
   "license": "MIT",
   "scripts": {
-    "prettier": "prettier --write gtest.js README.md examples/*.html",
+    "prettier": "prettier --write src/**/*.js README.md examples/*.html",
+    "build": "rollup src/setup.js --file gtest.js --format iife",
+    "dev": "rollup src/setup.js --file gtest.js --format iife --watch",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -18,5 +20,8 @@
   "homepage": "https://github.com/ged-odoo/g-test-runner#readme",
   "prettier": {
     "printWidth": 100
+  },
+  "devDependencies": {
+    "rollup": "^2.50.6"
   }
 }
