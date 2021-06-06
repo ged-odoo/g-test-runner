@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>gTest</title>
+  </head>
+  <body>
+    <script src="../gtest.js"></script>
+    <script>
+      (function () {
+        const { suite, test, getFixture } = gTest;
+
+        suite("assert.equal", () => {
+          test("misc", (assert) => {
+            assert.equal(1 + 1, 2);
+            assert.equal(1 + 1, 2, "1 + 1 should be equal to 2");
+            assert.equal(1 + 1, 3);
+            assert.equal(1 + 1, 3, "1 + 1 should be equal to 2");
+          });
+        });
+
+        suite("assert.ok", () => {
+          test("misc", (assert) => {
+            assert.ok(true);
+            assert.ok(true, "msg");
+            assert.ok(false);
+            assert.ok(false, "msg");
+            assert.not.ok(true);
+            assert.not.ok(true, "msg");
+            assert.not.ok(false);
+            assert.not.ok(false, "msg");
+          });
+        });
+
+        suite("assert.step/verifySteps", () => {
+          test("assert.step (success)", (assert) => {
+            assert.step("abc");
+            assert.step("def");
+            assert.verifySteps(["abc", "def"]);
+            assert.step("again");
+            assert.verifySteps(["again"]);
+          });
+
+          test("assert.step (failure)", (assert) => {
+            assert.step("def");
+            assert.step("abc");
+            assert.verifySteps(["abc", "def"]);
+            assert.step("again");
+            assert.verifySteps(["again"]);
+          });
+
+          test("assert.step with a non string", (assert) => {
+            assert.step(123);
+          });
+        });
+
+        suite("assert.expect", () => {
+          test("assert.expect, success", (assert) => {
+            assert.expect(2);
+            assert.ok(true);
+            assert.ok(true);
+          });
+
+          test("assert.expect, fail", (assert) => {
+            assert.expect(2);
+            assert.ok(true);
+          });
+        });
+
+        suite("assert.deepEqual", () => {
+          test("misc", (assert) => {
+            assert.deepEqual(true, true);
+            assert.deepEqual(1, null);
+            assert.deepEqual([], []);
+            assert.deepEqual([3, "hey", { b: 1 }], [3, "hey", { b: 1 }]);
+            assert.not.deepEqual([3, "hey", { b: 2 }], [3, "hey", { b: 1 }]);
+          });
+        });
+
+        suite("assert.throws", () => {
+          test("misc", (assert) => {
+            assert.throws(2);
+            assert.throws(() => {
+              throw new Error("boom");
+            });
+            assert.throws(() => {
+              throw new Error("boom");
+            }, /boom/);
+            assert.throws(() => {
+              throw new Error("bing");
+            }, /boom/);
+          });
+
+          test("negation", (assert) => {
+            assert.not.throws(2);
+            assert.not.throws(() => {
+              throw new Error("boom");
+            });
+            assert.not.throws(() => {
+              throw new Error("boom");
+            }, /boom/);
+            assert.not.throws(() => {
+              throw new Error("bing");
+            }, /boom/);
+            assert.not.throws(() => {});
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>

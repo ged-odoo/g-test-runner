@@ -8,11 +8,10 @@ Assert.extend("throws", ({ isNot }, fn, matcher = Error) => {
     };
   }
   const shouldThrow = !isNot;
-
   try {
     fn();
   } catch (e) {
-    if (shouldThrow) {
+    if (!shouldThrow) {
       return {
         pass: false,
         message: `expected function not to throw`,

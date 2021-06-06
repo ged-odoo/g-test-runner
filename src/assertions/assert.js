@@ -36,7 +36,7 @@ export class Assert {
           assertion.info.push([darkred("Source:"), multiline(stack)]);
         }
         this._assertions.push(assertion);
-        this._pass = Boolean(this._pass && assertion.pass);
+        this.setResultState(this._pass && assertion.pass);
       },
     }[name];
   };
@@ -47,6 +47,13 @@ export class Assert {
   _isNot = false;
   _pass = true;
 
+  setResultState(val) {
+    let assert = this;
+    while (assert.__proto__ instanceof Assert) {
+      assert = assert.__proto__;
+    }
+    assert._pass = Boolean(val);
+  }
   get not() {
     const result = Object.create(this);
     result._isNot = !this._isNot;
