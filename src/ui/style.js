@@ -274,7 +274,7 @@ color: darkgreen;
 
 .gtest-stack {
     font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    margin: 3px;
+    margin: 0 3px;
     font-size: 12px;
     line-height: 18px;  
     color: #091124;

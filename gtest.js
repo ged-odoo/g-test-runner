@@ -184,6 +184,22 @@
     }
   }
 
+  function color(col) {
+    return (text) => `<span class="gtest-text-${col}">${escapeHTML(text)}</span>`;
+  }
+
+  const green = color("green");
+  const red = color("red");
+  const darkred = color("darkred");
+  const multiline = (text) => `<pre class="gtest-stack">${text}</pre>`;
+
+  const userAgent$1 = navigator.userAgent;
+  const isFirefox = userAgent$1.includes("Firefox");
+
+  function formatStack(stack) {
+    return isFirefox ? stack : stack.toString().split("\n").slice(1).join("\n");
+  }
+
   class Assert {
     static extend = function extend(name, fn) {
       if (name in Assert.prototype) {
@@ -193,10 +209,15 @@
         [name](...args) {
           const isNot = this._isNot;
           const applyModifier = (pass) => (isNot ? !pass : Boolean(pass));
-          const info = { isNot, stack: new Error().stack, applyModifier };
+          const info = { isNot, applyModifier, green, red, darkred, multiline };
           const assertion = fn.call(this, info, ...args);
           if (!("message" in assertion)) {
-            assertion.message = () => (assertion.pass ? "okay" : "not okay");
+            assertion.message = assertion.pass ? "okay" : "not okay";
+          }
+          if (!assertion.pass) {
+            const stack = formatStack(new Error().stack);
+            assertion.info = assertion.info || [];
+            assertion.info.push([darkred("Source:"), multiline(stack)]);
           }
           this._assertions.push(assertion);
           this._pass = Boolean(this._pass && assertion.pass);
@@ -223,7 +244,7 @@
         if (actualNumber !== n) {
           this._assertions.push({
             pass: false,
-            message: () => `Expected ${n} assertions, but ${actualNumber} were run`,
+            message: `Expected ${n} assertions, but ${actualNumber} were run`,
             stack,
           });
           this._pass = false;
@@ -1227,7 +1248,7 @@ color: darkgreen;
 
 .gtest-stack {
     font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    margin: 3px;
+    margin: 0 3px;
     font-size: 12px;
     line-height: 18px;  
     color: #091124;
@@ -1262,13 +1283,6 @@ color: darkgreen;
     font-size: smaller;
     color: gray;
 }`;
-
-  const userAgent$1 = navigator.userAgent;
-  const isFirefox = userAgent$1.includes("Firefox");
-
-  function formatStack(stack) {
-    return isFirefox ? stack : stack.toString().split("\n").slice(1).join("\n");
-  }
 
   function setupTestResult(runner) {
     const bus = runner.bus;
@@ -1395,33 +1409,12 @@ color: darkgreen;
       div.classList.add("gtest-result-line");
       const lineCls = assertion.pass ? "gtest-text-darkgreen" : "gtest-text-darkred";
       div.classList.add(lineCls);
-      div.innerText = `${index + 1}. ${assertion.message()}`;
+      div.innerText = `${index + 1}. ${assertion.message}`;
       parentEl.appendChild(div);
-      const lines = [];
-      if ("expected" in assertion) {
-        lines.push([
-          `<span class="gtest-text-green">Expected:</span>`,
-          `<span>${escapeHTML(assertion.expected)}</span>`,
-        ]);
-      }
-      if ("value" in assertion) {
-        lines.push([
-          `<span class="gtest-text-red">Received:</span>`,
-          `<span>${escapeHTML(assertion.value)}</span>`,
-        ]);
-      }
-      if (assertion.stack) {
-        lines.push([
-          `<span class="gtest-text-darkred">Source:</span>`,
-          `<pre class="gtest-stack">${formatStack(assertion.stack)}</pre>`,
-        ]);
-      }
-      if (lines.length) {
-        addInfoTable(parentEl, lines);
-      }
+      addInfoTable(parentEl, assertion.info);
     }
 
-    function addInfoTable(parentEl, lines) {
+    function addInfoTable(parentEl, lines = []) {
       for (let [left, right] of lines) {
         const line = makeEl("div", ["gtest-info-line"]);
         const lDiv = makeEl("div", ["gtest-info-line-left"]);
@@ -1533,6 +1526,7 @@ color: darkgreen;
     });
 
     // force reload on links even when location did not change
+    const search = location$1.search;
     document.querySelector(".gtest-runner").addEventListener("click", (ev) => {
       if (ev.target.matches("a")) {
         if (location$1.search === search) {
@@ -1698,81 +1692,80 @@ color: darkgreen;
     };
   }
 
-  Assert.extend("deepEqual", ({ isNot, stack, applyModifier }, value, expected) => {
+  Assert.extend("deepEqual", ({ isNot, applyModifier, red, green }, value, expected) => {
     const pass = applyModifier(deepEqual(value, expected));
     if (pass) {
-      const message = () => `values are ${isNot ? "not " : ""}deep equal`;
+      const message = `values are ${isNot ? "not " : ""}deep equal`;
       return { pass, message };
     } else {
-      const message = () => `expected values ${isNot ? "not " : ""}to be deep equal`;
+      const message = `expected values ${isNot ? "not " : ""}to be deep equal`;
       return {
         pass,
         message,
-        expected,
-        value,
-        stack,
+        info: [
+          [green("Expected:"), expected],
+          [red("Received:"), value],
+        ],
       };
     }
   });
 
-  Assert.extend("equal", ({ isNot, stack, applyModifier }, value, expected) => {
+  Assert.extend("equal", ({ isNot, applyModifier, red, green }, value, expected) => {
     const pass = applyModifier(value === expected);
     if (pass) {
-      const message = () => `values are ${isNot ? "not " : ""}equal`;
+      const message = `values are ${isNot ? "not " : ""}equal`;
       return { pass, message };
     } else {
-      const message = () => `expected values ${isNot ? "not " : ""}to be equal`;
+      const message = `expected values ${isNot ? "not " : ""}to be equal`;
       return {
         pass,
         message,
-        expected,
-        value,
-        stack,
+        info: [
+          [green("Expected:"), expected],
+          [red("Received:"), value],
+        ],
       };
     }
   });
 
-  Assert.extend("ok", ({ isNot, stack, applyModifier }, value) => {
+  Assert.extend("ok", ({ isNot, applyModifier, red }, value) => {
     const pass = applyModifier(value);
     if (pass) {
-      const message = () => `value is ${isNot ? "not " : ""}truthy`;
-      return { pass, message };
+      return { pass, message: `value is ${isNot ? "not " : ""}truthy` };
     } else {
-      const message = () => `expected value ${isNot ? "not " : ""}to be truthy`;
+      const message = `expected value ${isNot ? "not " : ""}to be truthy`;
       return {
         pass,
         message,
-        value,
-        stack,
+        info: [[red("Received:"), value]],
       };
     }
   });
 
-  Assert.extend("step", function ({ isNot, stack }, str) {
+  Assert.extend("step", function ({ isNot, red }, str) {
     if (isNot) {
-      return { pass: false, message: () => `assert.step cannot be negated`, stack };
+      return { pass: false, message: `assert.step cannot be negated` };
     }
     if (typeof str !== "string") {
       return {
         pass: false,
-        message: () => "assert.step requires a string",
-        stack,
+        message: "assert.step requires a string",
+        info: [[red("Received:"), str]],
       };
     }
     this._steps = this._steps || [];
     this._steps.push(str);
     return {
       pass: true,
-      message: () => `step: "${str}"`,
+      message: `step: "${str}"`,
     };
   });
 
-  Assert.extend("throws", ({ isNot, stack }, fn, matcher = Error) => {
+  Assert.extend("throws", ({ isNot }, fn, matcher = Error) => {
     if (!(typeof fn === "function")) {
       return {
         pass: false,
-        message: () => "assert.throws requires a function as first argument",
-        stack,
+        message: "assert.throws requires a function as first argument",
       };
     }
     const shouldThrow = !isNot;
@@ -1781,35 +1774,28 @@ color: darkgreen;
       fn();
     } catch (e) {
       if (shouldThrow) {
-        const message = () => `expected function not to throw`;
         return {
           pass: false,
-          message,
-          stack,
+          message: `expected function not to throw`,
         };
       }
       const pass = matcher instanceof RegExp ? e.message.match(matcher) : e instanceof matcher;
       if (pass) {
-        const message = () => `function did throw`;
+        const message = `function did throw`;
         return { pass, message };
       } else {
-        const message = () => `function did throw, but error is not valid`;
         return {
           pass,
-          message,
-          stack,
+          message: `function did throw, but error is not valid`,
         };
       }
     }
     if (!shouldThrow) {
-      const message = () => `function did not throw`;
-      return { pass: true, message };
+      return { pass: true, message: `function did not throw` };
     } else {
-      const message = () => `expected function to throw`;
       return {
         pass: false,
-        message,
-        stack,
+        message: `expected function to throw`,
       };
     }
   });
@@ -1818,9 +1804,9 @@ color: darkgreen;
     return "[" + list.map((elem) => `"${elem}"`).join(", ") + "]";
   }
 
-  Assert.extend("verifySteps", function ({ isNot, stack }, steps) {
+  Assert.extend("verifySteps", function ({ isNot, green, red }, steps) {
     if (isNot) {
-      return { pass: false, message: () => `assert.verifySteps cannot be negated`, stack };
+      return { pass: false, message: `assert.verifySteps cannot be negated` };
     }
     const expectedSteps = this._steps || [];
     let pass = true;
@@ -1831,16 +1817,17 @@ color: darkgreen;
     if (pass) {
       return {
         pass,
-        message: () => "steps are correct",
+        message: "steps are correct",
       };
     }
 
     return {
       pass,
-      message: () => "steps are not correct",
-      expected: formatList(expectedSteps),
-      value: formatList(steps),
-      stack,
+      message: "steps are not correct",
+      info: [
+        [green("Expected:"), formatList(expectedSteps)],
+        [red("Received:"), formatList(steps)],
+      ],
     };
   });
 
@@ -1864,9 +1851,9 @@ color: darkgreen;
       version: "0.9",
     },
     config,
-    beforeSuite: beforeSuite,
-    beforeEach: beforeEach,
-    afterTest: afterTest,
+    beforeSuite,
+    beforeEach,
+    afterTest,
     afterSuite,
     start: runner.start.bind(runner),
     suite,

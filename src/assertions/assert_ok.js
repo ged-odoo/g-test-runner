@@ -1,17 +1,15 @@
 import { Assert } from "./assert";
 
-Assert.extend("ok", ({ isNot, stack, applyModifier }, value) => {
+Assert.extend("ok", ({ isNot, applyModifier, red }, value) => {
   const pass = applyModifier(value);
   if (pass) {
-    const message = () => `value is ${isNot ? "not " : ""}truthy`;
-    return { pass, message };
+    return { pass, message: `value is ${isNot ? "not " : ""}truthy` };
   } else {
-    const message = () => `expected value ${isNot ? "not " : ""}to be truthy`;
+    const message = `expected value ${isNot ? "not " : ""}to be truthy`;
     return {
       pass,
       message,
-      value,
-      stack,
+      info: [[red("Received:"), value]],
     };
   }
 });

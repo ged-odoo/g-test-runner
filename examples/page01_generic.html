@@ -156,7 +156,7 @@
 
           test("assert.deepEqual and assert.notDeepEqual", (assert) => {
             assert.deepEqual(true, true);
-            assert.deepEqual(null, null);
+            assert.deepEqual(1, null);
             assert.deepEqual([], []);
             assert.deepEqual([3, "hey", { b: 1 }], [3, "hey", { b: 1 }]);
             assert.not.deepEqual([3, "hey", { b: 2 }], [3, "hey", { b: 1 }]);

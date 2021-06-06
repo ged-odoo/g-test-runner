@@ -1,13 +1,6 @@
 import { config } from "../config";
 import { makeEl } from "../utils/dom";
-import { escapeHTML, getUrlWithParams } from "../utils/utils";
-
-const userAgent = navigator.userAgent;
-const isFirefox = userAgent.includes("Firefox");
-
-function formatStack(stack) {
-  return isFirefox ? stack : stack.toString().split("\n").slice(1).join("\n");
-}
+import { getUrlWithParams } from "../utils/utils";
 
 export function setupTestResult(runner) {
   const bus = runner.bus;
@@ -134,33 +127,12 @@ export function setupTestResult(runner) {
     div.classList.add("gtest-result-line");
     const lineCls = assertion.pass ? "gtest-text-darkgreen" : "gtest-text-darkred";
     div.classList.add(lineCls);
-    div.innerText = `${index + 1}. ${assertion.message()}`;
+    div.innerText = `${index + 1}. ${assertion.message}`;
     parentEl.appendChild(div);
-    const lines = [];
-    if ("expected" in assertion) {
-      lines.push([
-        `<span class="gtest-text-green">Expected:</span>`,
-        `<span>${escapeHTML(assertion.expected)}</span>`,
-      ]);
-    }
-    if ("value" in assertion) {
-      lines.push([
-        `<span class="gtest-text-red">Received:</span>`,
-        `<span>${escapeHTML(assertion.value)}</span>`,
-      ]);
-    }
-    if (assertion.stack) {
-      lines.push([
-        `<span class="gtest-text-darkred">Source:</span>`,
-        `<pre class="gtest-stack">${formatStack(assertion.stack)}</pre>`,
-      ]);
-    }
-    if (lines.length) {
-      addInfoTable(parentEl, lines);
-    }
+    addInfoTable(parentEl, assertion.info);
   }
 
-  function addInfoTable(parentEl, lines) {
+  function addInfoTable(parentEl, lines = []) {
     for (let [left, right] of lines) {
       const line = makeEl("div", ["gtest-info-line"]);
       const lDiv = makeEl("div", ["gtest-info-line-left"]);

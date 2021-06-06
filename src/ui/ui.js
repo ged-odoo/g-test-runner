@@ -94,6 +94,7 @@ export async function setupUI(runner) {
   });
 
   // force reload on links even when location did not change
+  const search = location.search;
   document.querySelector(".gtest-runner").addEventListener("click", (ev) => {
     if (ev.target.matches("a")) {
       if (location.search === search) {

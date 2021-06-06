@@ -4,9 +4,9 @@ function formatList(list) {
   return "[" + list.map((elem) => `"${elem}"`).join(", ") + "]";
 }
 
-Assert.extend("verifySteps", function ({ isNot, stack }, steps) {
+Assert.extend("verifySteps", function ({ isNot, green, red }, steps) {
   if (isNot) {
-    return { pass: false, message: () => `assert.verifySteps cannot be negated`, stack };
+    return { pass: false, message: `assert.verifySteps cannot be negated` };
   }
   const expectedSteps = this._steps || [];
   let pass = true;
@@ -17,15 +17,16 @@ Assert.extend("verifySteps", function ({ isNot, stack }, steps) {
   if (pass) {
     return {
       pass,
-      message: () => "steps are correct",
+      message: "steps are correct",
     };
   }
 
   return {
     pass,
-    message: () => "steps are not correct",
-    expected: formatList(expectedSteps),
-    value: formatList(steps),
-    stack,
+    message: "steps are not correct",
+    info: [
+      [green("Expected:"), formatList(expectedSteps)],
+      [red("Received:"), formatList(steps)],
+    ],
   };
 });
