@@ -320,7 +320,7 @@ gTest.config.failFast = true;
 Note that it should be setup before it is actually used. So, for example,
 `autostart` should be set before the DOM is loaded.
 
-There is also a `extendAssert` method, discussed in the next session.
+There is also a `extend` method to add new assertions, discussed in the next session.
 
 ### Extending assert system
 
@@ -329,17 +329,17 @@ of the domain being tested. To do that, we can use the `extendAssert` method,
 as shown below:
 
 ```js
-gTest.extendAssert('isBetween', ({stack, applyModifier}, value, a, b)) => {
-    const pass = applyModifier(a <= value && value <= b);
+// const info = { isNot, applyModifier, green, red, darkred, multiline };
+gTest.extend('containsOnce', (info, fixture, selector) => {
+    const pass = info.applyModifier(fixture.querySelectorAll(selector).length == 1);
     if (pass) {
-        const message = () => `value is ${isNot ? "not " : ""}between ${a} and ${b}`;
+        const message = `value is ${info.isNot ? "not " : ""} present once`;
       return { pass, message };
     } else {
-    const message = () => `expected value ${isNot ? "not " : ""}to be between ${a} and ${b}`;
+    const message = `expected value ${info.isNot ? "not " : ""} present once`;
       return {
         pass,
         message,
-        stack,
       };
     }
 });
@@ -348,6 +348,6 @@ gTest.extendAssert('isBetween', ({stack, applyModifier}, value, a, b)) => {
 This example can then be used in a test like this:
 
 ```js
-assert.isBetween(value, 0, 10);
-assert.not.isBetween(value, 0, 10);
+assert.containsOnce(fixture, selector);
+assert.not.containsOnce(fixture, selector);
 ```
